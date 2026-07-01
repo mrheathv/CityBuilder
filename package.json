@@ -1,0 +1,21 @@
+{
+  "name": "citybuilder",
+  "version": "0.1.0",
+  "description": "Lo-fi tile renderer over a high-fidelity agent-based urban economics simulation.",
+  "type": "module",
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit",
+    "sim": "tsx src/cli.ts",
+    "dev": "vite",
+    "build": "vite build"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "tsx": "^4.7.0",
+    "typescript": "^5.4.0",
+    "vite": "^5.2.0",
+    "vitest": "^1.4.0"
+  }
+}

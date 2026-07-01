@@ -1,0 +1,19 @@
+import type { SimParams } from "./types.js";
+
+export const defaultParams: SimParams = {
+  commuteCostPerDistance: 2,
+  jobAccessDecay: 0.35,
+  congestionRadius: 3,
+  congestionWeight: 0.8,
+  rentAdjustSpeed: 0.25,
+  rentMultiplier: 0.9,
+  vacancyRentDecay: 0.06,
+  rentDemandRadius: 4,
+  targetVacancyRate: 0.2,
+  demandPressureWeight: 1.5,
+  baseMoveThreshold: 3,
+  immigrationRatePerTick: 1.5,
+  maxSearchCandidates: 8,
+  maxTicksBeforeLeaving: 12,
+  maxLogEntries: 10,
+};

@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>CityBuilder</title>
+    <style>
+      body {
+        margin: 0;
+        display: flex;
+        font-family: ui-monospace, "SF Mono", Consolas, monospace;
+        background: #1c1c1c;
+        color: #e8e8e0;
+      }
+      #left {
+        display: flex;
+        flex-direction: column;
+      }
+      #controls {
+        padding: 8px;
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        border-bottom: 1px solid #444;
+      }
+      #controls button {
+        font-family: inherit;
+        cursor: pointer;
+      }
+      canvas {
+        image-rendering: pixelated;
+        cursor: crosshair;
+      }
+      #info {
+        width: 380px;
+        padding: 12px;
+        white-space: pre-wrap;
+        font-size: 12px;
+        line-height: 1.5;
+        overflow-y: auto;
+        border-left: 1px solid #444;
+      }
+      #info button {
+        font-family: inherit;
+        background: #333;
+        color: #e8e8e0;
+        border: 1px solid #666;
+        border-radius: 3px;
+        cursor: pointer;
+        padding: 1px 6px;
+        margin: 1px 2px 1px 0;
+      }
+      #info button:hover {
+        background: #555;
+      }
+      .section-title {
+        color: #9ad;
+        font-weight: bold;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="left">
+      <div id="controls">
+        <button id="toggle">Pause</button>
+        <button id="step">Step</button>
+        <span id="tick">Tick 0</span>
+      </div>
+      <canvas id="app"></canvas>
+    </div>
+    <div id="info">Click a tile to inspect it.</div>
+    <script type="module" src="/src/render/main.ts"></script>
+  </body>
+</html>
