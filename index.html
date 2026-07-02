@@ -4,32 +4,125 @@
     <meta charset="UTF-8" />
     <title>CityBuilder</title>
     <style>
+      * {
+        box-sizing: border-box;
+      }
       body {
         margin: 0;
-        display: flex;
         font-family: ui-monospace, "SF Mono", Consolas, monospace;
         background: #1c1c1c;
         color: #e8e8e0;
       }
-      #left {
+      #app-root {
         display: flex;
         flex-direction: column;
+        height: 100vh;
       }
-      #controls {
-        padding: 8px;
+
+      #hud {
         display: flex;
-        gap: 8px;
-        align-items: center;
+        flex-wrap: wrap;
+        gap: 4px 20px;
+        padding: 8px 12px;
         border-bottom: 1px solid #444;
+        font-size: 13px;
       }
-      #controls button {
+      #hud .label {
+        color: #888;
+      }
+      #hud .value {
+        color: #e8e8e0;
+        font-weight: bold;
+      }
+
+      .toolbar {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        align-items: center;
+        padding: 6px 12px;
+        border-bottom: 1px solid #333;
+      }
+      .toolbar-label {
+        color: #9ad;
+        font-weight: bold;
+        margin-right: 4px;
+        font-size: 12px;
+      }
+      button {
         font-family: inherit;
         cursor: pointer;
+        background: #2c2c2c;
+        color: #e8e8e0;
+        border: 1px solid #555;
+        border-radius: 3px;
+        padding: 3px 8px;
+        font-size: 12px;
+      }
+      button:hover {
+        background: #3d3d3d;
+      }
+      button.active {
+        background: #3a5a86;
+        border-color: #7ab0ff;
+        color: #fff;
+      }
+
+      #main {
+        flex: 1;
+        display: flex;
+        overflow: hidden;
+      }
+      #canvas-col {
+        display: flex;
+        flex-direction: column;
+        overflow: auto;
+        padding: 12px;
       }
       canvas {
         image-rendering: pixelated;
         cursor: crosshair;
+        border: 1px solid #444;
       }
+
+      #legend {
+        margin-top: 10px;
+        font-size: 12px;
+      }
+      #legend .legend-title {
+        color: #9ad;
+        font-weight: bold;
+        margin-bottom: 4px;
+      }
+      .legend-bar-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .legend-bar {
+        width: 220px;
+        height: 14px;
+        border: 1px solid #666;
+      }
+      .legend-swatch {
+        width: 14px;
+        height: 14px;
+        display: inline-block;
+        margin-right: 6px;
+        border: 1px solid #666;
+        vertical-align: middle;
+      }
+      .legend-entry {
+        margin-bottom: 2px;
+      }
+
+      #feedback {
+        min-height: 1.6em;
+        padding: 4px 2px;
+        font-size: 12px;
+        color: #f7c948;
+      }
+
       #info {
         width: 380px;
         padding: 12px;
@@ -40,17 +133,8 @@
         border-left: 1px solid #444;
       }
       #info button {
-        font-family: inherit;
-        background: #333;
-        color: #e8e8e0;
-        border: 1px solid #666;
-        border-radius: 3px;
-        cursor: pointer;
         padding: 1px 6px;
         margin: 1px 2px 1px 0;
-      }
-      #info button:hover {
-        background: #555;
       }
       .section-title {
         color: #9ad;
@@ -59,15 +143,49 @@
     </style>
   </head>
   <body>
-    <div id="left">
-      <div id="controls">
+    <div id="app-root">
+      <div id="hud">
+        <span><span class="label">Tick</span> <span class="value" id="hud-tick">0</span></span>
+        <span><span class="label">Population</span> <span class="value" id="hud-population">0</span></span>
+        <span><span class="label">Treasury</span> <span class="value" id="hud-treasury">$0</span></span>
+        <span>
+          <span class="label">Tax rate</span> <span class="value" id="hud-tax">0%</span>
+          <button id="tax-down">-5%</button><button id="tax-up">+5%</button>
+        </span>
+        <span><span class="label">Overlay</span> <span class="value" id="hud-overlay">-</span></span>
+        <span><span class="label">Tool</span> <span class="value" id="hud-tool">-</span></span>
         <button id="toggle">Pause</button>
         <button id="step">Step</button>
-        <span id="tick">Tick 0</span>
       </div>
-      <canvas id="app"></canvas>
+
+      <div class="toolbar" id="overlay-toolbar">
+        <span class="toolbar-label">Overlay [1-4]</span>
+        <button data-overlay="landValue">1 Land value</button>
+        <button data-overlay="occupancy">2 Population</button>
+        <button data-overlay="congestion">3 Congestion</button>
+        <button data-overlay="landUse">4 Land use</button>
+      </div>
+
+      <div class="toolbar" id="tool-toolbar">
+        <span class="toolbar-label">Tool</span>
+        <button data-tool="inspect">Inspect</button>
+        <button data-tool="zoneResidential">Zone Residential</button>
+        <button data-tool="zoneCommercial">Zone Commercial</button>
+        <button data-tool="buildJobCenter">Build Job Center</button>
+        <button data-tool="removeJobCenter">Remove Job Center</button>
+        <button data-tool="unzone">Unzone</button>
+        <button data-tool="investAmenity">Invest Amenity</button>
+      </div>
+
+      <div id="main">
+        <div id="canvas-col">
+          <canvas id="app"></canvas>
+          <div id="legend"></div>
+          <div id="feedback"></div>
+        </div>
+        <div id="info">Click a tile to inspect it.</div>
+      </div>
     </div>
-    <div id="info">Click a tile to inspect it.</div>
     <script type="module" src="/src/render/main.ts"></script>
   </body>
 </html>
