@@ -126,6 +126,7 @@ export function createWorld(opts: WorldGenOptions): World {
     businesses,
     households,
     nextHouseholdSeq: 0,
+    player: { treasury: params.initialTreasury, taxRate: params.initialTaxRate },
   };
 
   // Seed initial households into a fraction of housing capacity, then give a

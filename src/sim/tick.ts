@@ -5,6 +5,7 @@ import { computeLandValues } from "./landValue.js";
 import { updateRents } from "./rent.js";
 import { householdResidentialSearch } from "./residentialSearch.js";
 import { spawnAndAttrition } from "./spawnAttrition.js";
+import { applyIncomeTax, collectTaxes } from "./tax.js";
 import type { World } from "./types.js";
 
 /**
@@ -14,12 +15,14 @@ import type { World } from "./types.js";
  */
 export function tick(world: World): void {
   spawnAndAttrition(world);
+  applyIncomeTax(world);
   computeLandValues(world);
   updateRents(world);
   householdResidentialSearch(world);
   householdJobSearch(world);
   businessHiring(world);
   settleFinances(world);
+  collectTaxes(world);
   world.tick += 1;
 }
 

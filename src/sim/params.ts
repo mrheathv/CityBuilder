@@ -16,4 +16,15 @@ export const defaultParams: SimParams = {
   maxSearchCandidates: 8,
   maxTicksBeforeLeaving: 12,
   maxLogEntries: 10,
+
+  initialTreasury: 1000,
+  initialTaxRate: 0.1,
+  zoneCost: 50,
+  unitsPerResidentialZone: 3,
+  buildJobCenterCost: 150,
+  jobCenterJobSlots: 4,
+  jobCenterWage: 14,
+  amenityInvestmentCost: 100,
+  amenityInvestmentAmount: 3,
+  amenityInvestmentRadius: 2,
 };

@@ -134,6 +134,33 @@ export interface SimParams {
   maxTicksBeforeLeaving: number;
   /** Max entries kept in a household's decision log. */
   maxLogEntries: number;
+
+  /** Player treasury at world creation. */
+  initialTreasury: number;
+  /** Player tax rate at world creation (fraction of wage income). */
+  initialTaxRate: number;
+  /** Cost to zone one empty tile residential or commercial. */
+  zoneCost: number;
+  /** Housing units created immediately when a tile is zoned residential. */
+  unitsPerResidentialZone: number;
+  /** Cost to build a job center on an already-zoned, business-less commercial tile. */
+  buildJobCenterCost: number;
+  /** Job slots created by a new job center. */
+  jobCenterJobSlots: number;
+  /** Wage paid by every slot at a new job center. */
+  jobCenterWage: number;
+  /** Cost per amenity investment action. */
+  amenityInvestmentCost: number;
+  /** Flat amenity increase applied to every tile within amenityInvestmentRadius. */
+  amenityInvestmentAmount: number;
+  /** Radius (tiles) an amenity investment reaches, flat (no falloff). */
+  amenityInvestmentRadius: number;
+}
+
+/** Player-facing city government state. Only ever touched by the player-action layer, never by agent decision logic. */
+export interface PlayerState {
+  treasury: number;
+  taxRate: number;
 }
 
 export interface World {
@@ -150,4 +177,5 @@ export interface World {
   businesses: Map<string, Business>;
   households: Map<string, Household>;
   nextHouseholdSeq: number;
+  player: PlayerState;
 }

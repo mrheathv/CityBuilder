@@ -13,3 +13,5 @@ export * from "./spawnAttrition.js";
 export * from "./finances.js";
 export * from "./tick.js";
 export * from "./inspect.js";
+export * from "./tax.js";
+export * from "./playerActions.js";

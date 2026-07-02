@@ -83,6 +83,7 @@ function makeTwoClusterWorld(): { world: World; unitA: HousingUnit; unitB: Housi
     businesses: new Map(),
     households: new Map(),
     nextHouseholdSeq: 0,
+    player: { treasury: params.initialTreasury, taxRate: params.initialTaxRate },
   };
 
   return { world, unitA, unitB };
