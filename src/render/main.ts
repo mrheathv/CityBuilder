@@ -49,11 +49,19 @@ async function main(): Promise<void> {
 
   const hudTick = document.getElementById("hud-tick")!;
   const hudPopulation = document.getElementById("hud-population")!;
+  const hudPopulationGoal = document.getElementById("hud-population-goal")!;
+  const hudPopulationTrend = document.getElementById("hud-population-trend")!;
   const hudTreasury = document.getElementById("hud-treasury")!;
+  const hudTreasuryTrend = document.getElementById("hud-treasury-trend")!;
   const hudTax = document.getElementById("hud-tax")!;
   const hudOverlay = document.getElementById("hud-overlay")!;
   const hudTool = document.getElementById("hud-tool")!;
   const hudSpeed = document.getElementById("hud-speed")!;
+
+  const gameOverOverlay = document.getElementById("game-over-overlay")!;
+  const gameOverTitle = document.getElementById("game-over-title")!;
+  const gameOverReason = document.getElementById("game-over-reason")!;
+  const gameOverStats = document.getElementById("game-over-stats")!;
 
   type ToolName = "inspect" | "zoneResidential" | "zoneCommercial" | "buildJobCenter" | "removeJobCenter" | "unzone" | "investAmenity";
 
@@ -201,14 +209,70 @@ async function main(): Promise<void> {
     }
   }
 
+  /** How many recent ticks the up/down arrow + delta number covers — the sparkline itself shows the fuller history buffer for context. */
+  const TREND_WINDOW_TICKS = 10;
+
+  function sparklineSvg(values: number[]): string {
+    const width = 64;
+    const height = 18;
+    if (values.length < 2) return `<svg width="${width}" height="${height}" class="sparkline"></svg>`;
+    const min = Math.min(...values);
+    const max = Math.max(...values);
+    const span = max - min || 1;
+    const points = values
+      .map((v, i) => {
+        const x = (i / (values.length - 1)) * width;
+        const y = height - ((v - min) / span) * (height - 2) - 1;
+        return `${x.toFixed(1)},${y.toFixed(1)}`;
+      })
+      .join(" ");
+    const last = values[values.length - 1]!;
+    const first = values[0]!;
+    const stroke = last > first ? "#7fd17f" : last < first ? "#e07b7b" : "#888";
+    return `<svg width="${width}" height="${height}" class="sparkline"><polyline points="${points}" fill="none" stroke="${stroke}" stroke-width="1.5" /></svg>`;
+  }
+
+  function trendArrowHtml(delta: number): string {
+    if (delta > 0) return `<span class="trend-text trend-up">▲+${delta.toFixed(0)}</span>`;
+    if (delta < 0) return `<span class="trend-text trend-down">▼${delta.toFixed(0)}</span>`;
+    return `<span class="trend-text trend-flat">→0</span>`;
+  }
+
+  /** "Change over the last ~10 ticks," shown as an arrow+delta, plus a sparkline over the fuller history buffer so a brewing spiral is visible before it's fatal. */
+  function renderTrend(el: HTMLElement, allValues: number[]): void {
+    const recent = allValues.slice(-TREND_WINDOW_TICKS);
+    const delta = recent.length >= 2 ? recent[recent.length - 1]! - recent[0]! : 0;
+    el.innerHTML = `${trendArrowHtml(delta)}${sparklineSvg(allValues)}`;
+  }
+
   function renderHud(): void {
     hudTick.textContent = String(world.tick);
     hudPopulation.textContent = String(world.households.size);
+    hudPopulationGoal.textContent = String(world.params.populationGoal);
     hudTreasury.textContent = `$${world.player.treasury.toFixed(0)}`;
     hudTax.textContent = `${(world.player.taxRate * 100).toFixed(0)}%`;
     hudOverlay.textContent = OVERLAY_LABELS[overlay];
     hudTool.textContent = TOOL_LABELS[tool];
     hudSpeed.textContent = SPEED_LABELS[speed];
+    renderTrend(hudPopulationTrend, world.history.map((h) => h.population));
+    renderTrend(hudTreasuryTrend, world.history.map((h) => h.treasury));
+  }
+
+  function renderGameOver(): void {
+    if (world.game.status === "playing") {
+      gameOverOverlay.classList.remove("visible");
+      return;
+    }
+    gameOverOverlay.classList.add("visible");
+    gameOverTitle.textContent = world.game.status === "won" ? "Victory!" : "Game Over";
+    gameOverTitle.className = world.game.status;
+    gameOverReason.textContent = world.game.reason ?? "";
+    gameOverStats.innerHTML = `
+      <span>Tick</span><span class="value">${world.tick}</span>
+      <span>Population</span><span class="value">${world.households.size} / ${world.params.populationGoal}</span>
+      <span>Treasury</span><span class="value">$${world.player.treasury.toFixed(0)}</span>
+      <span>Tax rate</span><span class="value">${(world.player.taxRate * 100).toFixed(0)}%</span>
+    `;
   }
 
   function render(nowMs: number = performance.now()): void {
@@ -216,6 +280,7 @@ async function main(): Promise<void> {
     renderLegend(legend);
     renderHud();
     renderInfo();
+    renderGameOver();
   }
 
   function setOverlay(next: OverlayMode): void {

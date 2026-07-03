@@ -42,5 +42,28 @@ export function collectTaxes(world: World): void {
       if (isActive) taxableLandValue += tile.landValue;
     }
   }
-  world.player.treasury += world.player.taxRate * taxableLandValue;
+  const revenue = world.player.taxRate * taxableLandValue;
+  world.player.lastTaxRevenue = revenue;
+  world.player.treasury += revenue;
+}
+
+/**
+ * The spending side of the challenge: every existing job center costs upkeep
+ * regardless of who built it (worldgen's or the player's) or whether its jobs
+ * are filled — a city inherits maintenance costs along with its businesses.
+ * Every point of player-invested amenity (tile.investedAmenity, never the
+ * world-gen baseline) costs upkeep too. This is what makes unchecked
+ * expansion actually risky: more job centers and parks mean more guaranteed
+ * spending every tick, whether or not tax revenue keeps pace.
+ */
+export function applyUpkeep(world: World): void {
+  const jobCenterUpkeep = world.businesses.size * world.params.jobCenterUpkeepPerTick;
+
+  let investedAmenityTotal = 0;
+  for (const tile of world.tiles) investedAmenityTotal += tile.investedAmenity;
+  const amenityUpkeep = investedAmenityTotal * world.params.amenityUpkeepPerPoint;
+
+  const totalUpkeep = jobCenterUpkeep + amenityUpkeep;
+  world.player.lastUpkeepCost = totalUpkeep;
+  world.player.treasury -= totalUpkeep;
 }

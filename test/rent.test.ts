@@ -26,6 +26,7 @@ function makeTwoClusterWorld(): { world: World; unitA: HousingUnit; unitB: Housi
       y: 0,
       use: "residential",
       amenity: 0,
+      investedAmenity: 0,
       landValue: 10,
       landValueBreakdown: { jobAccess: 10, amenity: 0, congestion: 0 },
       housingUnitIds: [],
@@ -83,7 +84,9 @@ function makeTwoClusterWorld(): { world: World; unitA: HousingUnit; unitB: Housi
     businesses: new Map(),
     households: new Map(),
     nextHouseholdSeq: 0,
-    player: { treasury: params.initialTreasury, taxRate: params.initialTaxRate },
+    player: { treasury: params.initialTreasury, taxRate: params.initialTaxRate, lastTaxRevenue: 0, lastUpkeepCost: 0 },
+    game: { status: "playing", reason: null, ticksInsolvent: 0 },
+    history: [],
   };
 
   return { world, unitA, unitB };

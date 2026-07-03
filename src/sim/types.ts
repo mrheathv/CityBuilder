@@ -13,8 +13,10 @@ export interface Tile {
   x: number;
   y: number;
   use: TileUse;
-  /** Static baseline set once at world-gen (e.g. proximity to a park/geography feature). Never changes. */
+  /** Static baseline set once at world-gen (e.g. proximity to a park/geography feature), plus any player amenity investment. */
   amenity: number;
+  /** Cumulative amenity added by investInAmenity specifically (a subset of `amenity`) — tracked separately so upkeep bills only the player-funded portion, never the world-gen baseline. */
+  investedAmenity: number;
   /** Emergent, recomputed every tick from current world state. Never set directly. */
   landValue: number;
   landValueBreakdown: LandValueBreakdown;
@@ -155,12 +157,44 @@ export interface SimParams {
   amenityInvestmentAmount: number;
   /** Radius (tiles) an amenity investment reaches, flat (no falloff). */
   amenityInvestmentRadius: number;
+
+  /** Charged every tick for every existing job center (business), regardless of who built it or whether its jobs are filled — city infrastructure costs money to keep running. */
+  jobCenterUpkeepPerTick: number;
+  /** Charged every tick per point of player-invested amenity (tile.investedAmenity), not the static world-gen baseline. */
+  amenityUpkeepPerPoint: number;
+
+  /** Households the player must reach to win. */
+  populationGoal: number;
+  /** Ticks allowed to reach populationGoal before it's a loss (ran out of time). */
+  goalDeadlineTicks: number;
+  /** Consecutive ticks treasury must stay negative before it's a bankruptcy loss. */
+  bankruptcyGraceTicks: number;
 }
 
-/** Player-facing city government state. Only ever touched by the player-action layer, never by agent decision logic. */
+/** Player-facing city government state. Only ever touched by the player-action layer or the tax/upkeep phases, never by agent decision logic. */
 export interface PlayerState {
   treasury: number;
   taxRate: number;
+  /** Property tax collected this tick, kept for the HUD/leading-indicator and bankruptcy diagnostics. */
+  lastTaxRevenue: number;
+  /** Upkeep charged this tick, same purpose. */
+  lastUpkeepCost: number;
+}
+
+export type GameStatus = "playing" | "won" | "lost";
+
+export interface GameState {
+  status: GameStatus;
+  /** Human-readable, derived entirely from real numbers (never a canned string) once status !== "playing". */
+  reason: string | null;
+  /** Consecutive ticks treasury has stayed negative; resets to 0 the moment it isn't. */
+  ticksInsolvent: number;
+}
+
+export interface HistoryPoint {
+  tick: number;
+  population: number;
+  treasury: number;
 }
 
 export interface World {
@@ -178,4 +212,7 @@ export interface World {
   households: Map<string, Household>;
   nextHouseholdSeq: number;
   player: PlayerState;
+  game: GameState;
+  /** Rolling window of recent ticks for trend/leading-indicator display, capped at HISTORY_LENGTH. */
+  history: HistoryPoint[];
 }

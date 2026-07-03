@@ -34,6 +34,27 @@
         color: #e8e8e0;
         font-weight: bold;
       }
+      .trend {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        margin-left: 4px;
+      }
+      .trend-text {
+        font-size: 11px;
+      }
+      .trend-up {
+        color: #7fd17f;
+      }
+      .trend-down {
+        color: #e07b7b;
+      }
+      .trend-flat {
+        color: #888;
+      }
+      .sparkline {
+        vertical-align: middle;
+      }
 
       .toolbar {
         display: flex;
@@ -140,14 +161,80 @@
         color: #9ad;
         font-weight: bold;
       }
+
+      #game-over-overlay {
+        display: none;
+        position: fixed;
+        inset: 0;
+        background: rgba(10, 10, 10, 0.82);
+        z-index: 10;
+        align-items: center;
+        justify-content: center;
+      }
+      #game-over-overlay.visible {
+        display: flex;
+      }
+      #game-over-box {
+        background: #232323;
+        border: 2px solid #666;
+        border-radius: 6px;
+        padding: 28px 36px;
+        max-width: 520px;
+        text-align: center;
+      }
+      #game-over-title {
+        font-size: 26px;
+        font-weight: bold;
+        margin-bottom: 12px;
+      }
+      #game-over-title.won {
+        color: #7fd17f;
+      }
+      #game-over-title.lost {
+        color: #e07b7b;
+      }
+      #game-over-reason {
+        font-size: 13px;
+        color: #ccc;
+        margin-bottom: 18px;
+        line-height: 1.5;
+      }
+      #game-over-stats {
+        font-size: 12px;
+        color: #999;
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 4px 20px;
+        text-align: left;
+        border-top: 1px solid #444;
+        padding-top: 14px;
+      }
+      #game-over-stats .value {
+        color: #e8e8e0;
+        font-weight: bold;
+      }
     </style>
   </head>
   <body>
+    <div id="game-over-overlay">
+      <div id="game-over-box">
+        <div id="game-over-title"></div>
+        <div id="game-over-reason"></div>
+        <div id="game-over-stats"></div>
+      </div>
+    </div>
     <div id="app-root">
       <div id="hud">
         <span><span class="label">Tick</span> <span class="value" id="hud-tick">0</span></span>
-        <span><span class="label">Population</span> <span class="value" id="hud-population">0</span></span>
-        <span><span class="label">Treasury</span> <span class="value" id="hud-treasury">$0</span></span>
+        <span>
+          <span class="label">Population</span> <span class="value" id="hud-population">0</span>
+          <span class="label">/ goal</span> <span class="value" id="hud-population-goal">0</span>
+          <span class="trend" id="hud-population-trend"></span>
+        </span>
+        <span>
+          <span class="label">Treasury</span> <span class="value" id="hud-treasury">$0</span>
+          <span class="trend" id="hud-treasury-trend"></span>
+        </span>
         <span>
           <span class="label">Tax rate</span> <span class="value" id="hud-tax">0%</span>
           <button id="tax-down">-5%</button><button id="tax-up">+5%</button>

@@ -49,6 +49,8 @@ export interface TileInspection {
   use: string;
   landValue: number;
   landValueBreakdown: { jobAccess: number; amenity: number; congestion: number };
+  /** Portion of landValueBreakdown.amenity that's player-funded (and therefore costs upkeep), vs. the world-gen baseline. */
+  investedAmenity: number;
   units: { id: string; rent: number; occupantHouseholdId: string | null }[];
   businessId: string | null;
 }
@@ -70,6 +72,7 @@ export function inspectTile(world: World, tileId: string): TileInspection | null
     use: tile.use,
     landValue: tile.landValue,
     landValueBreakdown: tile.landValueBreakdown,
+    investedAmenity: tile.investedAmenity,
     units,
     businessId: tile.businessId,
   };

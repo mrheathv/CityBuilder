@@ -125,6 +125,7 @@ export function investInAmenity(world: World, tileId: string): ActionResult {
   for (const tile of world.tiles) {
     if (distance(center.x, center.y, tile.x, tile.y) <= world.params.amenityInvestmentRadius) {
       tile.amenity += world.params.amenityInvestmentAmount;
+      tile.investedAmenity += world.params.amenityInvestmentAmount;
     }
   }
   return { ok: true };

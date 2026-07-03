@@ -63,6 +63,7 @@ export function createWorld(opts: WorldGenOptions): World {
         y,
         use,
         amenity,
+        investedAmenity: 0,
         landValue: 0,
         landValueBreakdown: { jobAccess: 0, amenity, congestion: 0 },
         housingUnitIds: [],
@@ -126,7 +127,9 @@ export function createWorld(opts: WorldGenOptions): World {
     businesses,
     households,
     nextHouseholdSeq: 0,
-    player: { treasury: params.initialTreasury, taxRate: params.initialTaxRate },
+    player: { treasury: params.initialTreasury, taxRate: params.initialTaxRate, lastTaxRevenue: 0, lastUpkeepCost: 0 },
+    game: { status: "playing", reason: null, ticksInsolvent: 0 },
+    history: [],
   };
 
   // Seed initial households into a fraction of housing capacity, then give a

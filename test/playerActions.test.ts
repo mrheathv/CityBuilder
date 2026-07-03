@@ -242,10 +242,16 @@ describe("tax", () => {
     }
     expectedRevenue *= world.player.taxRate;
 
-    // collectTaxes is the last phase in tick(), so the state read here
-    // (right after the tick completes) is exactly what it saw.
-    expect(world.player.treasury).toBeGreaterThan(before);
-    expect(world.player.treasury - before).toBeCloseTo(expectedRevenue, 6);
+    // applyUpkeep runs right after collectTaxes in the same tick, so the net
+    // change also includes upkeep on every existing job center — read the
+    // exact same way applyUpkeep computes it, since that's a separate
+    // mechanic from the revenue formula this test targets.
+    let expectedUpkeep = world.businesses.size * world.params.jobCenterUpkeepPerTick;
+    let investedAmenityTotal = 0;
+    for (const tile of world.tiles) investedAmenityTotal += tile.investedAmenity;
+    expectedUpkeep += investedAmenityTotal * world.params.amenityUpkeepPerPoint;
+
+    expect(world.player.treasury - before).toBeCloseTo(expectedRevenue - expectedUpkeep, 6);
   });
 
   it("setTaxRate clamps to [0, 1]", () => {
