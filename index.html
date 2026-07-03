@@ -2,6 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
     <title>CityBuilder</title>
     <style>
       * {
@@ -104,6 +105,10 @@
         image-rendering: pixelated;
         cursor: crosshair;
         border: 1px solid #444;
+        /* Prevents double-tap-to-zoom and pull-to-refresh gestures from
+           hijacking taps on the grid; a single tap still reaches our click
+           handler immediately (no synthetic-click delay). */
+        touch-action: manipulation;
       }
 
       #legend {
@@ -212,6 +217,50 @@
       #game-over-stats .value {
         color: #e8e8e0;
         font-weight: bold;
+      }
+
+      /*
+       * Below this width, canvas + info panel side-by-side stop fitting
+       * comfortably. Switch to a naturally-scrolling stacked layout instead
+       * of the fixed-100vh/internal-overflow-regions layout desktop uses —
+       * nested scroll regions are notoriously fragile on mobile Safari,
+       * especially with a canvas inside them capturing touch events.
+       */
+      @media (max-width: 860px) {
+        #app-root {
+          height: auto;
+          min-height: 100vh;
+          min-height: 100dvh;
+        }
+        #main {
+          flex-direction: column;
+          overflow: visible;
+        }
+        #canvas-col {
+          overflow: visible;
+        }
+        canvas {
+          max-width: 100%;
+          height: auto;
+          display: block;
+        }
+        #info {
+          width: auto;
+          max-width: 100%;
+          border-left: none;
+          border-top: 1px solid #444;
+        }
+        /* Touch targets bigger than a mouse needs, and legible without a pinch-zoom. */
+        button {
+          padding: 7px 11px;
+          font-size: 13px;
+        }
+        #hud {
+          font-size: 14px;
+        }
+        .legend-bar {
+          width: 160px;
+        }
       }
     </style>
   </head>

@@ -322,9 +322,16 @@ async function main(): Promise<void> {
   });
 
   canvas.addEventListener("click", (e) => {
+    // rect is the CSS-displayed size, which can differ from the canvas's
+    // internal pixel resolution (canvas.width/height) once CSS scales it down
+    // to fit a narrow/mobile viewport — scale the tap position back into
+    // canvas-pixel space before dividing into tiles, or taps would land on
+    // the wrong tile on any screen where the canvas isn't shown 1:1.
     const rect = canvas.getBoundingClientRect();
-    const x = Math.floor((e.clientX - rect.left) / TILE_SIZE);
-    const y = Math.floor((e.clientY - rect.top) / TILE_SIZE);
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    const x = Math.floor(((e.clientX - rect.left) * scaleX) / TILE_SIZE);
+    const y = Math.floor(((e.clientY - rect.top) * scaleY) / TILE_SIZE);
     const clickedTile = world.tiles.find((t) => t.x === x && t.y === y);
     if (!clickedTile) return;
 
