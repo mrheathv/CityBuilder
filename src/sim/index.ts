@@ -9,6 +9,7 @@ export * from "./household.js";
 export * from "./residentialSearch.js";
 export * from "./jobSearch.js";
 export * from "./businessHiring.js";
+export * from "./development.js";
 export * from "./spawnAttrition.js";
 export * from "./finances.js";
 export * from "./tick.js";

@@ -25,24 +25,36 @@ export function applyIncomeTax(world: World): void {
 }
 
 /**
- * Property tax: taxRate * land value, summed over tiles that are actually in
- * use (an occupied home or a business with at least one filled job) —
- * vacant/unbuilt land contributes nothing. Reads land value and occupancy as
- * settled by this tick's earlier phases.
+ * Property tax: residential tiles are taxed taxRate * landValue *
+ * (occupiedUnits / residentialTaxUnitsPerLandValue) — a tower with 20
+ * occupied units genuinely pays several times what one occupied house pays,
+ * so density directly funds the city, without special-casing anything.
+ * Deliberately assessed on landValue (recomputed fresh every tick) rather
+ * than each unit's actual rent: rent eases toward its target over several
+ * ticks (rentAdjustSpeed), so taxing rent directly would make revenue lag
+ * land value by design — assessed-value tax shouldn't lag the market the way
+ * a rent roll would. Commercial tiles stay a flat taxRate * land value once
+ * any job is filled (job-center capacity isn't part of the density
+ * mechanic, only residential is). Vacant/unbuilt land and vacant units
+ * contribute nothing. Reads land value and occupancy as settled by this
+ * tick's earlier phases.
  */
 export function collectTaxes(world: World): void {
-  let taxableLandValue = 0;
+  let revenue = 0;
   for (const tile of world.tiles) {
     if (tile.use === "residential") {
-      const isActive = tile.housingUnitIds.some((id) => world.housingUnits.get(id)!.occupantId !== null);
-      if (isActive) taxableLandValue += tile.landValue;
+      let occupied = 0;
+      for (const unitId of tile.housingUnitIds) {
+        if (world.housingUnits.get(unitId)!.occupantId !== null) occupied++;
+      }
+      revenue += (occupied / world.params.residentialTaxUnitsPerLandValue) * tile.landValue;
     } else if (tile.use === "commercial" && tile.businessId) {
       const business = world.businesses.get(tile.businessId)!;
       const isActive = business.jobSlotIds.some((id) => world.jobSlots.get(id)!.occupantId !== null);
-      if (isActive) taxableLandValue += tile.landValue;
+      if (isActive) revenue += tile.landValue;
     }
   }
-  const revenue = world.player.taxRate * taxableLandValue;
+  revenue *= world.player.taxRate;
   world.player.lastTaxRevenue = revenue;
   world.player.treasury += revenue;
 }

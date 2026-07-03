@@ -31,6 +31,10 @@ function makeTwoClusterWorld(): { world: World; unitA: HousingUnit; unitB: Housi
       landValueBreakdown: { jobAccess: 10, amenity: 0, congestion: 0 },
       housingUnitIds: [],
       businessId: null,
+      developmentLevel: 1,
+      growthStreak: 0,
+      decayStreak: 0,
+      lastDevelopmentChange: null,
     };
     tiles.push(tile);
     tilesById.set(id, tile);

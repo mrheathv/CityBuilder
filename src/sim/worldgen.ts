@@ -68,6 +68,10 @@ export function createWorld(opts: WorldGenOptions): World {
         landValueBreakdown: { jobAccess: 0, amenity, congestion: 0 },
         housingUnitIds: [],
         businessId: null,
+        developmentLevel: 0,
+        growthStreak: 0,
+        decayStreak: 0,
+        lastDevelopmentChange: null,
       };
       tiles.push(tile);
       tilesById.set(id, tile);
@@ -96,11 +100,20 @@ export function createWorld(opts: WorldGenOptions): World {
     tile.businessId = businessId;
   }
 
-  // Housing units on residential tiles.
+  // Housing units on residential tiles. Initial developmentLevel is 1 (house)
+  // or 2 (low-rise) — never higher; levels 3-4 are only ever earned through
+  // sustained growth (src/sim/development.ts), so a freshly generated city
+  // never opens with towers already standing. Denser starting tiles cluster
+  // toward downtown (same dNorm used for commercial placement above), giving
+  // the Density overlay something to show from tick 0 instead of a flat grid.
   for (const tile of tiles) {
     if (tile.use !== "residential") continue;
-    const numUnits = rng.int(2, 5);
-    for (let i = 0; i < numUnits; i++) {
+    const dNorm = distance(tile.x, tile.y, cx, cy) / maxD;
+    const pLevel2 = Math.max(0.35, 0.65 - 0.3 * dNorm);
+    const level = rng.next() < pLevel2 ? 2 : 1;
+    const capacity = params.developmentCapacity[level]!;
+    tile.developmentLevel = level;
+    for (let i = 0; i < capacity; i++) {
       const unitId = `hu-${tile.id}-${i}`;
       housingUnits.set(unitId, {
         id: unitId,

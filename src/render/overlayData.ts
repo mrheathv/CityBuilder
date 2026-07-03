@@ -7,13 +7,14 @@ import { LAND_USE_COLORS, LAND_USE_LABELS, LandUseCategory } from "./colorScales
  * tomorrow) so overlay semantics can never drift between renderer swaps.
  */
 
-export type OverlayMode = "landValue" | "occupancy" | "congestion" | "landUse";
+export type OverlayMode = "landValue" | "occupancy" | "congestion" | "landUse" | "density";
 
 export const OVERLAY_LABELS: Record<OverlayMode, string> = {
   landValue: "Land value",
   occupancy: "Population (occupied units)",
   congestion: "Congestion",
   landUse: "Land use",
+  density: "Density (development level)",
 };
 
 export type LegendInfo =
@@ -43,6 +44,8 @@ export function quantitativeValue(world: World, tile: Tile, overlay: Exclude<Ove
       return occupiedUnitCount(world, tile);
     case "congestion":
       return tile.landValueBreakdown.congestion;
+    case "density":
+      return tile.developmentLevel;
   }
 }
 

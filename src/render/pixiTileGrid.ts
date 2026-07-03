@@ -34,6 +34,19 @@ const GLOW_MIN_ALPHA = 0.12;
 const GLOW_MAX_ALPHA = 0.3;
 const GLOW_PULSE_HZ = 1.6;
 
+/**
+ * Flat "nested square" density glyph shown on the land-use overlay only —
+ * developmentLevel rings drawn at fixed sizes (not rescaled per tile), so
+ * the same ring always means the same level everywhere on the grid: a
+ * level-2 tile always draws exactly the two smallest rings, a level-4 tower
+ * draws all four out to the largest. Deliberately flat outlines, no
+ * perspective or extrusion.
+ */
+const DENSITY_GLYPH_MIN_HALF_FACTOR = 0.1;
+const DENSITY_GLYPH_MAX_HALF_FACTOR = 0.32;
+const DENSITY_GLYPH_COLOR = 0xffffff;
+const DENSITY_GLYPH_ALPHA = 0.85;
+
 interface TileVisual {
   x: number;
   y: number;
@@ -69,10 +82,11 @@ export async function createTileGrid(canvas: HTMLCanvasElement, world: World, op
   const tileLayer = new Container();
   const gridLinesLayer = new Graphics();
   const glowLayer = new Container();
+  const densityGlyphLayer = new Graphics();
   const selectionOutline = new Graphics();
   glowLayer.filters = [new BlurFilter({ strength: 6 })];
 
-  app.stage.addChild(tileLayer, gridLinesLayer, glowLayer, selectionOutline);
+  app.stage.addChild(tileLayer, gridLinesLayer, glowLayer, densityGlyphLayer, selectionOutline);
 
   const visuals: TileVisual[] = world.tiles.map((tile) => {
     const sprite = new Sprite(Texture.WHITE);
@@ -117,6 +131,21 @@ export async function createTileGrid(canvas: HTMLCanvasElement, world: World, op
     });
   }
 
+  function updateDensityGlyphs(currentWorld: World): void {
+    densityGlyphLayer.clear();
+    const maxLevel = currentWorld.params.developmentCapacity.length - 1;
+    for (const tile of currentWorld.tiles) {
+      if (tile.developmentLevel <= 0) continue;
+      const cx = tile.x * tileSize + tileSize / 2;
+      const cy = tile.y * tileSize + tileSize / 2;
+      for (let level = 1; level <= tile.developmentLevel; level++) {
+        const frac = maxLevel > 1 ? (level - 1) / (maxLevel - 1) : 0;
+        const half = tileSize * (DENSITY_GLYPH_MIN_HALF_FACTOR + (DENSITY_GLYPH_MAX_HALF_FACTOR - DENSITY_GLYPH_MIN_HALF_FACTOR) * frac);
+        densityGlyphLayer.rect(cx - half, cy - half, half * 2, half * 2).stroke({ width: 1.25, color: DENSITY_GLYPH_COLOR, alpha: DENSITY_GLYPH_ALPHA });
+      }
+    }
+  }
+
   function updateSelection(currentWorld: World, highlightTileId: string | null): void {
     selectionOutline.clear();
     if (!highlightTileId) return;
@@ -138,7 +167,9 @@ export async function createTileGrid(canvas: HTMLCanvasElement, world: World, op
         v.sprite.tint = rgbToHexInt(v.current);
       });
       legend = categoricalLegend(overlay);
+      updateDensityGlyphs(currentWorld);
     } else {
+      densityGlyphLayer.clear();
       const values = currentWorld.tiles.map((t) => quantitativeValue(currentWorld, t, overlay));
       const min = Math.min(...values);
       const max = Math.max(...values);

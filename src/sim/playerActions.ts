@@ -29,7 +29,12 @@ export function zoneResidential(world: World, tileId: string): ActionResult {
   if (insufficientFunds) return insufficientFunds;
 
   tile.use = "residential";
-  for (let i = 0; i < world.params.unitsPerResidentialZone; i++) {
+  tile.developmentLevel = 1;
+  tile.growthStreak = 0;
+  tile.decayStreak = 0;
+  tile.lastDevelopmentChange = null;
+  const capacity = world.params.developmentCapacity[1]!;
+  for (let i = 0; i < capacity; i++) {
     const unit: HousingUnit = {
       id: `hu-${tile.id}-${i}`,
       tileId: tile.id,
@@ -109,6 +114,10 @@ export function unzoneTile(world: World, tileId: string): ActionResult {
     if (occupied > 0) return { ok: false, reason: `cannot unzone: ${occupied} unit(s) still occupied` };
     for (const unitId of tile.housingUnitIds) world.housingUnits.delete(unitId);
     tile.housingUnitIds = [];
+    tile.developmentLevel = 0;
+    tile.growthStreak = 0;
+    tile.decayStreak = 0;
+    tile.lastDevelopmentChange = null;
   }
 
   tile.use = "empty";

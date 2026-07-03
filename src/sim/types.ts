@@ -8,6 +8,15 @@ export interface LandValueBreakdown {
   congestion: number;
 }
 
+/** Why a residential tile's developmentLevel last changed — always derived from the real numbers that triggered it, never hand-authored. */
+export interface DevelopmentChange {
+  tick: number;
+  direction: "grew" | "decayed";
+  fromLevel: number;
+  toLevel: number;
+  reason: string;
+}
+
 export interface Tile {
   id: string;
   x: number;
@@ -24,6 +33,22 @@ export interface Tile {
   housingUnitIds: string[];
   /** Populated only when use === 'commercial'. */
   businessId: string | null;
+  /**
+   * Building density, meaningful only when use === 'residential': 0 for
+   * non-residential tiles, 1 (house) to 4 (tower) otherwise. Housing-unit
+   * capacity at each level comes from params.developmentCapacity. Never set
+   * directly except by world-gen (initial level), zoneResidential (always
+   * starts at 1), and src/sim/development.ts's sustained-conditions
+   * growth/decay — the same "emergent, not player-placed" boundary as every
+   * other agent-driven field.
+   */
+  developmentLevel: number;
+  /** Consecutive ticks the grow conditions have all held simultaneously; resets to 0 the instant any one breaks. Sustained-condition streak, not a single good tick. */
+  growthStreak: number;
+  /** Consecutive ticks the decay conditions have all held; resets to 0 the instant any one breaks. */
+  decayStreak: number;
+  /** Null until the first growth/decay event. */
+  lastDevelopmentChange: DevelopmentChange | null;
 }
 
 export interface HousingUnit {
@@ -143,8 +168,6 @@ export interface SimParams {
   initialTaxRate: number;
   /** Cost to zone one empty tile residential or commercial. */
   zoneCost: number;
-  /** Housing units created immediately when a tile is zoned residential. */
-  unitsPerResidentialZone: number;
   /** Cost to build a job center on an already-zoned, business-less commercial tile. */
   buildJobCenterCost: number;
   /** Job slots created by a new job center. */
@@ -158,6 +181,13 @@ export interface SimParams {
   /** Radius (tiles) an amenity investment reaches, flat (no falloff). */
   amenityInvestmentRadius: number;
 
+  /**
+   * Residential property tax is taxRate * landValue * (occupiedUnits / this).
+   * A tile with exactly this many occupied units pays one full landValue
+   * (the same amount a single occupied tile always paid before density
+   * existed); denser tiles scale up from there, sparser tiles scale down.
+   */
+  residentialTaxUnitsPerLandValue: number;
   /** Charged every tick for every existing job center (business), regardless of who built it or whether its jobs are filled — city infrastructure costs money to keep running. */
   jobCenterUpkeepPerTick: number;
   /** Charged every tick per point of player-invested amenity (tile.investedAmenity), not the static world-gen baseline. */
@@ -169,6 +199,24 @@ export interface SimParams {
   goalDeadlineTicks: number;
   /** Consecutive ticks treasury must stay negative before it's a bankruptcy loss. */
   bankruptcyGraceTicks: number;
+
+  /**
+   * Housing-unit capacity by developmentLevel. Index 0 is unused (developmentLevel
+   * 0 means "not residential"); indices 1-4 are house / low-rise / mid-rise / tower.
+   */
+  developmentCapacity: number[];
+  /** A residential tile must stay at or above this land value, every tick, to accumulate growthStreak. */
+  growthLandValueThreshold: number;
+  /** Consecutive ticks the grow conditions must all hold before a tile grows one level. */
+  growthSustainTicks: number;
+  /** Fraction of current-level capacity that must be occupied (>=) for growth to progress — "near-fully occupied." */
+  growthOccupancyThreshold: number;
+  /** A residential tile must stay at or below this land value, every tick, to accumulate decayStreak. Kept well below growthLandValueThreshold (hysteresis) so a tile can't flicker between levels. */
+  decayLandValueThreshold: number;
+  /** Consecutive ticks the decay conditions must all hold before a tile drops one level. */
+  decaySustainTicks: number;
+  /** Occupancy fraction at or below which counts as "persistent vacancy" for decay. */
+  decayVacancyThreshold: number;
 }
 
 /** Player-facing city government state. Only ever touched by the player-action layer or the tax/upkeep phases, never by agent decision logic. */

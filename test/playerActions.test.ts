@@ -29,7 +29,8 @@ describe("zoning", () => {
 
     const tile = world.tilesById.get(tileId)!;
     expect(tile.use).toBe("residential");
-    expect(tile.housingUnitIds.length).toBe(world.params.unitsPerResidentialZone);
+    expect(tile.developmentLevel).toBe(1);
+    expect(tile.housingUnitIds.length).toBe(world.params.developmentCapacity[1]);
     for (const unitId of tile.housingUnitIds) {
       expect(world.housingUnits.get(unitId)!.occupantId).toBeNull();
     }
@@ -224,7 +225,7 @@ describe("tax", () => {
   // land-value-proportional cost added to currentUtility/utilityWithHome,
   // pending confirmation before touching household.ts.
 
-  it("collectTaxes adds taxRate * land value of active tiles only, ignoring vacant/unbuilt ones", () => {
+  it("collectTaxes scales residential tax by occupied unit count relative to land value, and taxes commercial per active tile's land value, ignoring vacant/unbuilt ones", () => {
     const world = createWorld({ seed: 1, width: 16, height: 16 });
     runTicks(world, 5);
     const before = world.player.treasury;
@@ -233,8 +234,9 @@ describe("tax", () => {
 
     let expectedRevenue = 0;
     for (const tile of world.tiles) {
-      if (tile.use === "residential" && tile.housingUnitIds.some((id) => world.housingUnits.get(id)!.occupantId !== null)) {
-        expectedRevenue += tile.landValue;
+      if (tile.use === "residential") {
+        const occupied = tile.housingUnitIds.filter((id) => world.housingUnits.get(id)!.occupantId !== null).length;
+        expectedRevenue += (occupied / world.params.residentialTaxUnitsPerLandValue) * tile.landValue;
       } else if (tile.use === "commercial" && tile.businessId) {
         const business = world.businesses.get(tile.businessId)!;
         if (business.jobSlotIds.some((id) => world.jobSlots.get(id)!.occupantId !== null)) expectedRevenue += tile.landValue;

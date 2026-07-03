@@ -1,5 +1,5 @@
 import { commuteCost, currentUtility, homeTileOf, jobTileOf } from "./household.js";
-import type { World } from "./types.js";
+import type { DevelopmentChange, World } from "./types.js";
 
 export interface HouseholdInspection {
   id: string;
@@ -53,6 +53,15 @@ export interface TileInspection {
   investedAmenity: number;
   units: { id: string; rent: number; occupantHouseholdId: string | null }[];
   businessId: string | null;
+  /** 0 for non-residential tiles; 1 (house) to 4 (tower) otherwise. */
+  developmentLevel: number;
+  /** Current housing-unit capacity at this tile's developmentLevel (housingUnitIds.length, the actual source of truth). */
+  developmentCapacity: number;
+  /** Consecutive ticks the grow/decay conditions have held so far — how close this tile is to its next change. */
+  growthStreak: number;
+  decayStreak: number;
+  /** Null until the first growth/decay event ever happens on this tile. */
+  lastDevelopmentChange: DevelopmentChange | null;
 }
 
 /** Everything needed to answer "why does this tile have this land value / who lives or works here?" */
@@ -75,6 +84,11 @@ export function inspectTile(world: World, tileId: string): TileInspection | null
     investedAmenity: tile.investedAmenity,
     units,
     businessId: tile.businessId,
+    developmentLevel: tile.developmentLevel,
+    developmentCapacity: tile.housingUnitIds.length,
+    growthStreak: tile.growthStreak,
+    decayStreak: tile.decayStreak,
+    lastDevelopmentChange: tile.lastDevelopmentChange,
   };
 }
 

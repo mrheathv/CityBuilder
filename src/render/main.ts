@@ -114,6 +114,8 @@ async function main(): Promise<void> {
     return `<button data-kind="household" data-id="${id}">${id}</button>`;
   }
 
+  const DEVELOPMENT_LABELS: Record<number, string> = { 0: "—", 1: "house", 2: "low-rise", 3: "mid-rise", 4: "tower" };
+
   function formatTile(t: TileInspection): string {
     const bd = t.landValueBreakdown;
     const lines = [
@@ -125,6 +127,19 @@ async function main(): Promise<void> {
       `  amenity:     ${bd.amenity.toFixed(2)}`,
       `  congestion: -${bd.congestion.toFixed(2)}`,
     ];
+    if (t.use === "residential") {
+      const label = DEVELOPMENT_LABELS[t.developmentLevel] ?? String(t.developmentLevel);
+      lines.push(``, `<span class="section-title">Development: level ${t.developmentLevel} (${label}), capacity ${t.developmentCapacity}</span>`);
+      if (t.growthStreak > 0) {
+        lines.push(`  growing: ${t.growthStreak} tick(s) of sustained conditions toward the next level`);
+      } else if (t.decayStreak > 0) {
+        lines.push(`  decaying: ${t.decayStreak} tick(s) of sustained low value/vacancy toward losing a level`);
+      }
+      if (t.lastDevelopmentChange) {
+        const c = t.lastDevelopmentChange;
+        lines.push(`  last change (tick ${c.tick}, ${c.direction} ${c.fromLevel}→${c.toLevel}): ${c.reason}`);
+      }
+    }
     if (t.businessId) {
       lines.push(``, `<button data-kind="business" data-id="${t.businessId}">Business ${t.businessId}</button>`);
     }
@@ -332,6 +347,7 @@ async function main(): Promise<void> {
     else if (e.key === "2") setOverlay("occupancy");
     else if (e.key === "3") setOverlay("congestion");
     else if (e.key === "4") setOverlay("landUse");
+    else if (e.key === "5") setOverlay("density");
   });
 
   canvas.addEventListener("click", (e) => {

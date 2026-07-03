@@ -1,4 +1,5 @@
 import { businessHiring } from "./businessHiring.js";
+import { developmentGrowth } from "./development.js";
 import { settleFinances } from "./finances.js";
 import { checkGameState, recordHistory } from "./gameState.js";
 import { householdJobSearch } from "./jobSearch.js";
@@ -26,6 +27,7 @@ export function tick(world: World): void {
   computeLandValues(world);
   updateRents(world);
   householdResidentialSearch(world);
+  developmentGrowth(world);
   householdJobSearch(world);
   businessHiring(world);
   settleFinances(world);
