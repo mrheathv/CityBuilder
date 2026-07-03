@@ -14,7 +14,7 @@ import {
 import type { ActionResult } from "../sim/playerActions.js";
 import { drawWorld, OVERLAY_LABELS } from "./draw.js";
 import type { LegendInfo, OverlayMode } from "./draw.js";
-import { SEQUENTIAL_HIGH, SEQUENTIAL_LOW } from "./colorScales.js";
+import { sequentialGradientCss } from "./colorScales.js";
 
 const TILE_SIZE = 34;
 const WIDTH = 16;
@@ -183,7 +183,7 @@ function renderLegend(legend: LegendInfo): void {
       <div class="legend-title">${legend.label}</div>
       <div class="legend-bar-row">
         <span>${legend.min.toFixed(1)}</span>
-        <div class="legend-bar" style="background: linear-gradient(to right, ${SEQUENTIAL_LOW}, ${SEQUENTIAL_HIGH})"></div>
+        <div class="legend-bar" style="background: ${sequentialGradientCss()}"></div>
         <span>${legend.max.toFixed(1)}</span>
       </div>`;
   } else {
