@@ -41,11 +41,15 @@ async function main(): Promise<void> {
   const tileGrid = await createTileGrid(canvas, world, { tileSize: TILE_SIZE });
 
   const infoEl = document.getElementById("info")!;
+  const infoContentEl = document.getElementById("info-content")!;
+  const infoCloseBtn = document.getElementById("info-close") as HTMLButtonElement;
   const legendEl = document.getElementById("legend")!;
   const feedbackEl = document.getElementById("feedback")!;
   const stepBtn = document.getElementById("step") as HTMLButtonElement;
   const taxUpBtn = document.getElementById("tax-up") as HTMLButtonElement;
   const taxDownBtn = document.getElementById("tax-down") as HTMLButtonElement;
+  const hudMenuToggle = document.getElementById("hud-menu-toggle") as HTMLButtonElement;
+  const hudSecondaryPanel = document.getElementById("hud-secondary-panel")!;
 
   const hudTick = document.getElementById("hud-tick")!;
   const hudPopulation = document.getElementById("hud-population")!;
@@ -89,6 +93,12 @@ async function main(): Promise<void> {
 
   type Selection = { kind: "tile" | "household" | "business"; id: string };
   let selected: Selection | null = null;
+  // Decoupled from `selected`: on the mobile bottom-sheet layout, a build/zone
+  // tap should update the panel's data without popping it open over the
+  // canvas (that would interrupt rapid zoning) — only an Inspect-tool tap or
+  // drilling into a household/business from inside the sheet opens it. Has
+  // no effect on desktop, where #info is always visible inline regardless.
+  let infoSheetOpen = false;
   let overlay: OverlayMode = "landValue";
   let tool: ToolName = "inspect";
   let speed: Speed = 1;
@@ -163,19 +173,21 @@ async function main(): Promise<void> {
   }
 
   function renderInfo(): void {
+    infoEl.classList.toggle("open", infoSheetOpen);
+
     if (!selected) {
-      infoEl.innerHTML = "Click a tile to inspect it.";
+      infoContentEl.innerHTML = "Click a tile to inspect it.";
       return;
     }
     if (selected.kind === "tile") {
       const inspection = inspectTile(world, selected.id);
-      infoEl.innerHTML = inspection ? formatTile(inspection) : "Tile not found.";
+      infoContentEl.innerHTML = inspection ? formatTile(inspection) : "Tile not found.";
     } else if (selected.kind === "business") {
       const inspection = inspectBusiness(world, selected.id);
-      infoEl.innerHTML = inspection ? formatBusiness(inspection) : "Business not found.";
+      infoContentEl.innerHTML = inspection ? formatBusiness(inspection) : "Business not found.";
     } else {
       const inspection = inspectHousehold(world, selected.id);
-      infoEl.innerHTML = inspection ? formatHousehold(inspection) : "Household no longer in the simulation (it may have left the city).";
+      infoContentEl.innerHTML = inspection ? formatHousehold(inspection) : "Household no longer in the simulation (it may have left the city).";
     }
   }
 
@@ -340,8 +352,11 @@ async function main(): Promise<void> {
       const result = action(clickedTile.id);
       feedbackEl.textContent = result.ok ? `${TOOL_LABELS[tool]} on ${clickedTile.id}: done.` : `${TOOL_LABELS[tool]} on ${clickedTile.id}: ${result.reason}`;
       selected = { kind: "tile", id: clickedTile.id };
+      // Deliberately doesn't open the sheet - a build/zone tap shouldn't
+      // interrupt rapid-fire zoning with a popup every time.
     } else {
       selected = { kind: "tile", id: clickedTile.id };
+      infoSheetOpen = true;
     }
     render();
   });
@@ -352,7 +367,18 @@ async function main(): Promise<void> {
     const id = target.dataset.id;
     if (!kind || !id) return;
     selected = { kind, id };
+    infoSheetOpen = true;
     render();
+  });
+
+  infoCloseBtn.addEventListener("click", () => {
+    infoSheetOpen = false;
+    render();
+  });
+
+  hudMenuToggle.addEventListener("click", () => {
+    hudSecondaryPanel.classList.toggle("open");
+    hudMenuToggle.classList.toggle("active", hudSecondaryPanel.classList.contains("open"));
   });
 
   document.querySelectorAll<HTMLButtonElement>("#speed-controls button[data-speed]").forEach((btn) => {

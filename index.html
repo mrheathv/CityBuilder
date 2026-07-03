@@ -56,6 +56,15 @@
       .sparkline {
         vertical-align: middle;
       }
+      /* On desktop these just flow inline as ordinary HUD items (unwrapped,
+         so they still participate directly in #hud's flexbox); the mobile
+         media query turns this into a togglable dropdown panel instead. */
+      #hud-secondary-panel {
+        display: contents;
+      }
+      #hud-menu-toggle {
+        display: none;
+      }
 
       .toolbar {
         display: flex;
@@ -152,15 +161,27 @@
       #info {
         width: 380px;
         padding: 12px;
+        overflow-y: auto;
+        border-left: 1px solid #444;
+        position: relative;
+      }
+      #info-content {
         white-space: pre-wrap;
         font-size: 12px;
         line-height: 1.5;
-        overflow-y: auto;
-        border-left: 1px solid #444;
       }
       #info button {
         padding: 1px 6px;
         margin: 1px 2px 1px 0;
+      }
+      #info-close {
+        display: none;
+        position: absolute;
+        top: 6px;
+        right: 6px;
+        padding: 2px 9px;
+        font-size: 16px;
+        line-height: 1.2;
       }
       .section-title {
         color: #9ad;
@@ -220,46 +241,175 @@
       }
 
       /*
-       * Below this width, canvas + info panel side-by-side stop fitting
-       * comfortably. Switch to a naturally-scrolling stacked layout instead
-       * of the fixed-100vh/internal-overflow-regions layout desktop uses —
-       * nested scroll regions are notoriously fragile on mobile Safari,
-       * especially with a canvas inside them capturing touch events.
+       * Below this width, a scrolling responsive page stops feeling like a
+       * game: scrolling to reach the info panel or a tile scrolls your
+       * stats and tools out of view too. Below this breakpoint the app
+       * becomes a fixed-viewport shell instead — nothing scrolls except
+       * deliberately, inside an open drawer or sheet. Population/treasury
+       * (the two things worth watching continuously) and the overlay/tool
+       * switchers (the two things you tap constantly) stay permanently
+       * visible and one tap away; everything else collapses behind a
+       * menu toggle or a bottom sheet.
        */
       @media (max-width: 860px) {
-        #app-root {
-          height: auto;
-          min-height: 100vh;
-          min-height: 100dvh;
+        html,
+        body {
+          height: 100%;
+          overflow: hidden;
         }
+        #app-root {
+          height: 100vh;
+          height: 100dvh;
+          overflow: hidden;
+        }
+
+        #hud {
+          position: relative;
+          flex-wrap: wrap;
+          align-items: center;
+          gap: 6px 14px;
+          font-size: 13px;
+          /* Right padding reserves room for the absolutely-positioned menu
+             toggle so it never crowds out or truncates the primary stats. */
+          padding: 8px 46px 8px 12px;
+        }
+        .hud-primary {
+          /* Population/treasury (with their trend arrow + sparkline) must
+             always be fully visible — never truncated. If they don't fit
+             on one row at this width, they wrap onto their own line
+             instead of being clipped. */
+          white-space: normal;
+          overflow: visible;
+          max-width: 100%;
+        }
+        #hud-menu-toggle {
+          display: inline-block;
+          position: absolute;
+          top: 6px;
+          right: 8px;
+          flex: none;
+          font-size: 17px;
+          padding: 4px 11px;
+        }
+        #hud-menu-toggle.active {
+          background: #3a5a86;
+          border-color: #7ab0ff;
+        }
+        /* Collapsed: hidden entirely. Expanded: a dropdown panel floating
+           over the canvas rather than an inline block, so opening it never
+           shifts the toolbars/canvas underneath. */
+        #hud-secondary-panel {
+          display: none;
+        }
+        #hud-secondary-panel.open {
+          display: flex;
+          flex-direction: column;
+          align-items: flex-start;
+          gap: 8px;
+          position: absolute;
+          top: 100%;
+          right: 8px;
+          background: #232323;
+          border: 1px solid #555;
+          border-radius: 6px;
+          padding: 10px 12px;
+          z-index: 6;
+          box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+        }
+
+        /* Overlay/tool switching stays exactly one tap away, no drawer —
+           just a compact, horizontally-scrollable single row instead of
+           wrapping across several vertical rows and pushing the canvas
+           down. */
+        .toolbar {
+          flex-wrap: nowrap;
+          overflow-x: auto;
+          -webkit-overflow-scrolling: touch;
+        }
+        .toolbar button,
+        .toolbar-label {
+          flex: none;
+        }
+
         #main {
           flex-direction: column;
-          overflow: visible;
+          overflow: hidden;
+          min-height: 0;
         }
         #canvas-col {
-          overflow: visible;
+          flex: 1;
+          min-height: 0;
+          overflow: hidden;
+          padding: 8px;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          position: relative;
         }
         canvas {
           max-width: 100%;
+          max-height: 100%;
+          width: auto;
           height: auto;
+          aspect-ratio: 1 / 1;
           display: block;
         }
-        #info {
-          width: auto;
-          max-width: 100%;
-          border-left: none;
-          border-top: 1px solid #444;
+        #feedback {
+          position: absolute;
+          top: 8px;
+          left: 8px;
+          right: 8px;
+          min-height: 0;
+          background: rgba(20, 20, 20, 0.9);
+          border-radius: 4px;
+          padding: 6px 8px;
+          pointer-events: none;
         }
+        #feedback:empty {
+          display: none;
+        }
+        #legend {
+          flex: none;
+          margin-top: 6px;
+        }
+
+        /* The info panel becomes a bottom sheet over the canvas instead of
+           a block you scroll down to reach — it never moves your stats or
+           tools out of view, and closing it just puts you back where you
+           were. */
+        #info {
+          position: fixed;
+          left: 0;
+          right: 0;
+          bottom: 0;
+          width: auto;
+          max-height: 60vh;
+          border-left: none;
+          border-top: 2px solid #555;
+          border-radius: 12px 12px 0 0;
+          transform: translateY(100%);
+          transition: transform 0.2s ease-out;
+          z-index: 7;
+          box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.5);
+        }
+        #info.open {
+          transform: translateY(0);
+        }
+        #info-close {
+          display: block;
+        }
+        #info-content {
+          padding-right: 20px;
+        }
+
         /* Touch targets bigger than a mouse needs, and legible without a pinch-zoom. */
         button {
           padding: 7px 11px;
           font-size: 13px;
         }
-        #hud {
-          font-size: 14px;
-        }
         .legend-bar {
-          width: 160px;
+          width: 140px;
         }
       }
     </style>
@@ -274,30 +424,33 @@
     </div>
     <div id="app-root">
       <div id="hud">
-        <span><span class="label">Tick</span> <span class="value" id="hud-tick">0</span></span>
-        <span>
+        <span class="hud-primary">
           <span class="label">Population</span> <span class="value" id="hud-population">0</span>
           <span class="label">/ goal</span> <span class="value" id="hud-population-goal">0</span>
           <span class="trend" id="hud-population-trend"></span>
         </span>
-        <span>
+        <span class="hud-primary">
           <span class="label">Treasury</span> <span class="value" id="hud-treasury">$0</span>
           <span class="trend" id="hud-treasury-trend"></span>
         </span>
-        <span>
-          <span class="label">Tax rate</span> <span class="value" id="hud-tax">0%</span>
-          <button id="tax-down">-5%</button><button id="tax-up">+5%</button>
-        </span>
-        <span><span class="label">Overlay</span> <span class="value" id="hud-overlay">-</span></span>
-        <span><span class="label">Tool</span> <span class="value" id="hud-tool">-</span></span>
-        <span id="speed-controls">
-          <span class="label">Speed</span> <span class="value" id="hud-speed">-</span>
-          <button data-speed="0">Pause</button>
-          <button data-speed="1">1x</button>
-          <button data-speed="2">2x</button>
-          <button data-speed="4">4x</button>
-          <button id="step">Step</button>
-        </span>
+        <button id="hud-menu-toggle" aria-label="More stats and controls">&#9776;</button>
+        <div id="hud-secondary-panel">
+          <span><span class="label">Tick</span> <span class="value" id="hud-tick">0</span></span>
+          <span>
+            <span class="label">Tax rate</span> <span class="value" id="hud-tax">0%</span>
+            <button id="tax-down">-5%</button><button id="tax-up">+5%</button>
+          </span>
+          <span><span class="label">Overlay</span> <span class="value" id="hud-overlay">-</span></span>
+          <span><span class="label">Tool</span> <span class="value" id="hud-tool">-</span></span>
+          <span id="speed-controls">
+            <span class="label">Speed</span> <span class="value" id="hud-speed">-</span>
+            <button data-speed="0">Pause</button>
+            <button data-speed="1">1x</button>
+            <button data-speed="2">2x</button>
+            <button data-speed="4">4x</button>
+            <button id="step">Step</button>
+          </span>
+        </div>
       </div>
 
       <div class="toolbar" id="overlay-toolbar">
@@ -322,10 +475,13 @@
       <div id="main">
         <div id="canvas-col">
           <canvas id="app"></canvas>
-          <div id="legend"></div>
           <div id="feedback"></div>
+          <div id="legend"></div>
         </div>
-        <div id="info">Click a tile to inspect it.</div>
+        <div id="info">
+          <button id="info-close" aria-label="Close">&times;</button>
+          <div id="info-content">Click a tile to inspect it.</div>
+        </div>
       </div>
     </div>
     <script type="module" src="/src/render/main.ts"></script>
