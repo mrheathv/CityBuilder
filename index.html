@@ -177,11 +177,21 @@
       #info-close {
         display: none;
         position: absolute;
-        top: 6px;
-        right: 6px;
-        padding: 2px 9px;
-        font-size: 16px;
-        line-height: 1.2;
+        top: 4px;
+        right: 4px;
+        /* A real touch target (Apple/Google both recommend >=44px), not just
+           a snug fit around the glyph — a tiny corner X is easy to miss with
+           a thumb, which is exactly what made it feel unclosable on mobile. */
+        min-width: 44px;
+        min-height: 44px;
+        padding: 0;
+        font-size: 22px;
+        line-height: 1;
+        align-items: center;
+        justify-content: center;
+      }
+      #info-backdrop {
+        display: none;
       }
       .section-title {
         color: #9ad;
@@ -397,10 +407,21 @@
           transform: translateY(0);
         }
         #info-close {
-          display: block;
+          display: flex;
         }
         #info-content {
           padding-right: 20px;
+        }
+
+        /* Standard bottom-sheet pattern: tapping anywhere outside the sheet
+           dismisses it too, so closing it doesn't depend on precisely
+           hitting a small button in the corner. */
+        #info.open ~ #info-backdrop {
+          display: block;
+          position: fixed;
+          inset: 0;
+          z-index: 6;
+          background: rgba(0, 0, 0, 0.35);
         }
 
         /* Touch targets bigger than a mouse needs, and legible without a pinch-zoom. */
@@ -482,6 +503,7 @@
           <button id="info-close" aria-label="Close">&times;</button>
           <div id="info-content">Click a tile to inspect it.</div>
         </div>
+        <div id="info-backdrop"></div>
       </div>
     </div>
     <script type="module" src="/src/render/main.ts"></script>

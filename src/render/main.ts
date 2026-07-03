@@ -43,6 +43,7 @@ async function main(): Promise<void> {
   const infoEl = document.getElementById("info")!;
   const infoContentEl = document.getElementById("info-content")!;
   const infoCloseBtn = document.getElementById("info-close") as HTMLButtonElement;
+  const infoBackdrop = document.getElementById("info-backdrop")!;
   const legendEl = document.getElementById("legend")!;
   const feedbackEl = document.getElementById("feedback")!;
   const stepBtn = document.getElementById("step") as HTMLButtonElement;
@@ -372,6 +373,11 @@ async function main(): Promise<void> {
   });
 
   infoCloseBtn.addEventListener("click", () => {
+    infoSheetOpen = false;
+    render();
+  });
+
+  infoBackdrop.addEventListener("click", () => {
     infoSheetOpen = false;
     render();
   });
