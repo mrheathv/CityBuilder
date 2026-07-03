@@ -19,7 +19,11 @@ import { SEQUENTIAL_HIGH, SEQUENTIAL_LOW } from "./colorScales.js";
 const TILE_SIZE = 34;
 const WIDTH = 16;
 const HEIGHT = 16;
-const TICK_INTERVAL_MS = 300;
+
+/** 1x = 2 ticks/sec, tuned so changes are actually watchable propagating through the fields instead of flashing by. */
+const BASE_TICKS_PER_SECOND = 2;
+/** Safety valve: if the tab was backgrounded/throttled, don't burn through a huge backlog of ticks in one frame. */
+const MAX_CATCHUP_TICKS_PER_FRAME = 10;
 
 const world = createWorld({ seed: 1, width: WIDTH, height: HEIGHT });
 
@@ -31,7 +35,6 @@ const ctx = canvas.getContext("2d")!;
 const infoEl = document.getElementById("info")!;
 const legendEl = document.getElementById("legend")!;
 const feedbackEl = document.getElementById("feedback")!;
-const toggleBtn = document.getElementById("toggle") as HTMLButtonElement;
 const stepBtn = document.getElementById("step") as HTMLButtonElement;
 const taxUpBtn = document.getElementById("tax-up") as HTMLButtonElement;
 const taxDownBtn = document.getElementById("tax-down") as HTMLButtonElement;
@@ -42,6 +45,7 @@ const hudTreasury = document.getElementById("hud-treasury")!;
 const hudTax = document.getElementById("hud-tax")!;
 const hudOverlay = document.getElementById("hud-overlay")!;
 const hudTool = document.getElementById("hud-tool")!;
+const hudSpeed = document.getElementById("hud-speed")!;
 
 type ToolName = "inspect" | "zoneResidential" | "zoneCommercial" | "buildJobCenter" | "removeJobCenter" | "unzone" | "investAmenity";
 
@@ -64,11 +68,16 @@ const TOOL_ACTIONS: Partial<Record<ToolName, (tileId: string) => ActionResult>> 
   investAmenity: (tileId) => investInAmenity(world, tileId),
 };
 
+type Speed = 0 | 1 | 2 | 4;
+const SPEED_LABELS: Record<Speed, string> = { 0: "Paused", 1: "1x", 2: "2x", 4: "4x" };
+
 type Selection = { kind: "tile" | "household" | "business"; id: string };
 let selected: Selection | null = null;
 let overlay: OverlayMode = "landValue";
 let tool: ToolName = "inspect";
-let running = true;
+let speed: Speed = 1;
+let lastFrameTime: number | null = null;
+let accumulatorMs = 0;
 
 function escapeHtml(s: string): string {
   return s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
@@ -191,6 +200,7 @@ function renderHud(): void {
   hudTax.textContent = `${(world.player.taxRate * 100).toFixed(0)}%`;
   hudOverlay.textContent = OVERLAY_LABELS[overlay];
   hudTool.textContent = TOOL_LABELS[tool];
+  hudSpeed.textContent = SPEED_LABELS[speed];
 }
 
 function render(): void {
@@ -209,6 +219,15 @@ function setOverlay(next: OverlayMode): void {
 function setTool(next: ToolName): void {
   tool = next;
   document.querySelectorAll<HTMLButtonElement>("#tool-toolbar button").forEach((b) => b.classList.toggle("active", b.dataset.tool === next));
+  renderHud();
+}
+
+function setSpeed(next: Speed): void {
+  speed = next;
+  // Discard any banked partial-tick backlog so switching speeds never produces
+  // a burst of extra ticks reinterpreted at the new (possibly faster) rate.
+  accumulatorMs = 0;
+  document.querySelectorAll<HTMLButtonElement>("#speed-controls button[data-speed]").forEach((b) => b.classList.toggle("active", Number(b.dataset.speed) === next));
   renderHud();
 }
 
@@ -256,9 +275,8 @@ infoEl.addEventListener("click", (e) => {
   render();
 });
 
-toggleBtn.addEventListener("click", () => {
-  running = !running;
-  toggleBtn.textContent = running ? "Pause" : "Resume";
+document.querySelectorAll<HTMLButtonElement>("#speed-controls button[data-speed]").forEach((btn) => {
+  btn.addEventListener("click", () => setSpeed(Number(btn.dataset.speed) as Speed));
 });
 
 stepBtn.addEventListener("click", () => {
@@ -278,10 +296,35 @@ taxDownBtn.addEventListener("click", () => {
 
 setOverlay(overlay);
 setTool(tool);
+setSpeed(speed);
 
-setInterval(() => {
-  if (running) tick(world);
+/**
+ * Rendering and simulation stepping are fully decoupled: this loop runs
+ * every animation frame (full frame rate, however fast the browser wants to
+ * paint), but only calls tick() often enough to hit the target ticks/sec for
+ * the current speed — accumulated over real elapsed time, not tied to frame
+ * count. A tab hitching from 60fps to 20fps changes how often we *check*,
+ * never how many ticks accumulate per second of wall time, and never what
+ * tick() itself does — so the same wall-clock duration at the same speed
+ * always advances the sim by the same number of ticks regardless of frame
+ * rate.
+ */
+function frame(now: number): void {
+  if (lastFrameTime === null) lastFrameTime = now;
+  const elapsedMs = now - lastFrameTime;
+  lastFrameTime = now;
+
+  if (speed > 0) {
+    const msPerTick = 1000 / (BASE_TICKS_PER_SECOND * speed);
+    accumulatorMs = Math.min(accumulatorMs + elapsedMs, msPerTick * MAX_CATCHUP_TICKS_PER_FRAME);
+    while (accumulatorMs >= msPerTick) {
+      tick(world);
+      accumulatorMs -= msPerTick;
+    }
+  }
+
   render();
-}, TICK_INTERVAL_MS);
+  requestAnimationFrame(frame);
+}
 
-render();
+requestAnimationFrame(frame);
