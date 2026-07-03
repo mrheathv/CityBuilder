@@ -12,9 +12,10 @@ import {
   zoneResidential,
 } from "../sim/playerActions.js";
 import type { ActionResult } from "../sim/playerActions.js";
-import { drawWorld, OVERLAY_LABELS } from "./draw.js";
-import type { LegendInfo, OverlayMode } from "./draw.js";
+import { OVERLAY_LABELS } from "./overlayData.js";
+import type { LegendInfo, OverlayMode } from "./overlayData.js";
 import { sequentialGradientCss } from "./colorScales.js";
+import { createTileGrid } from "./pixiTileGrid.js";
 
 const TILE_SIZE = 34;
 const WIDTH = 16;
@@ -28,9 +29,7 @@ const MAX_CATCHUP_TICKS_PER_FRAME = 10;
 const world = createWorld({ seed: 1, width: WIDTH, height: HEIGHT });
 
 const canvas = document.getElementById("app") as HTMLCanvasElement;
-canvas.width = WIDTH * TILE_SIZE;
-canvas.height = HEIGHT * TILE_SIZE;
-const ctx = canvas.getContext("2d")!;
+const tileGrid = await createTileGrid(canvas, world, { tileSize: TILE_SIZE });
 
 const infoEl = document.getElementById("info")!;
 const legendEl = document.getElementById("legend")!;
@@ -203,8 +202,8 @@ function renderHud(): void {
   hudSpeed.textContent = SPEED_LABELS[speed];
 }
 
-function render(): void {
-  const legend = drawWorld(ctx, world, { tileSize: TILE_SIZE, overlay, highlightTileId: resolveHighlightTileId() });
+function render(nowMs: number = performance.now()): void {
+  const legend = tileGrid.update(world, overlay, resolveHighlightTileId(), nowMs);
   renderLegend(legend);
   renderHud();
   renderInfo();
@@ -323,7 +322,7 @@ function frame(now: number): void {
     }
   }
 
-  render();
+  render(now);
   requestAnimationFrame(frame);
 }
 

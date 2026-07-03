@@ -55,3 +55,24 @@ export const LAND_USE_LABELS: Record<LandUseCategory, string> = {
 };
 
 export const SELECTION_OUTLINE_COLOR = "#ffe400";
+
+export interface RgbColor {
+  r: number;
+  g: number;
+  b: number;
+}
+
+/** Parses either "#rrggbb" (our categorical palette) or "rgb(r, g, b)" (d3-scale-chromatic's output) into components. */
+export function parseCssColor(css: string): RgbColor {
+  if (css.startsWith("#")) {
+    const n = parseInt(css.slice(1), 16);
+    return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255 };
+  }
+  const match = css.match(/rgba?\(\s*(\d+)[,\s]+(\d+)[,\s]+(\d+)/);
+  if (!match) throw new Error(`Unrecognized color format: ${css}`);
+  return { r: Number(match[1]), g: Number(match[2]), b: Number(match[3]) };
+}
+
+export function rgbToHexInt(c: RgbColor): number {
+  return (Math.round(c.r) << 16) | (Math.round(c.g) << 8) | Math.round(c.b);
+}
