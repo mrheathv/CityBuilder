@@ -337,8 +337,8 @@ async function main(): Promise<void> {
     `;
   }
 
-  function render(nowMs: number = performance.now()): void {
-    const legend = tileGrid.update(world, overlay, resolveHighlightTileId(), nowMs);
+  function render(): void {
+    const legend = tileGrid.update(world, overlay, resolveHighlightTileId());
     renderLegend(legend);
     renderHud();
     renderInfo();
@@ -486,7 +486,7 @@ async function main(): Promise<void> {
       }
     }
 
-    render(now);
+    render();
     requestAnimationFrame(frame);
   }
 

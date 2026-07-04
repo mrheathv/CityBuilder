@@ -1,4 +1,4 @@
-import { Application, BlurFilter, Container, Graphics, Sprite, Texture } from "pixi.js";
+import { Application, Container, Graphics, Sprite, Texture } from "pixi.js";
 import type { World } from "../sim/types.js";
 import { categoricalLegend, landUseCategory, OVERLAY_LABELS, quantitativeValue, roadCategory } from "./overlayData.js";
 import type { LegendInfo, OverlayMode } from "./overlayData.js";
@@ -18,21 +18,12 @@ export interface TileGridOptions {
 
 export interface TileGrid {
   app: Application;
-  update(world: World, overlay: OverlayMode, highlightTileId: string | null, nowMs: number): LegendInfo;
+  update(world: World, overlay: OverlayMode, highlightTileId: string | null): LegendInfo;
   destroy(): void;
 }
 
 /** Displayed color moves this fraction of the remaining distance to its target every frame — a value change reads as a brief animation instead of a snap. */
 const COLOR_EASE_PER_FRAME = 0.18;
-
-/** Land value percentile above which a tile joins job centers in getting the "hot" pulse, recomputed every frame since the threshold shifts as the market moves. */
-const HIGH_LAND_VALUE_PERCENTILE = 0.9;
-
-const GLOW_RADIUS_FACTOR = 0.75;
-const GLOW_COLOR = 0xffdd88;
-const GLOW_MIN_ALPHA = 0.12;
-const GLOW_MAX_ALPHA = 0.3;
-const GLOW_PULSE_HZ = 1.6;
 
 /**
  * Flat "nested square" density glyph shown on the land-use overlay only —
@@ -60,9 +51,6 @@ interface TileVisual {
   y: number;
   sprite: Sprite;
   current: RgbColor;
-  glow: Graphics | null;
-  /** Per-tile phase offset so glowing tiles don't all pulse in lockstep. */
-  glowPhase: number;
 }
 
 function easeToward(current: RgbColor, target: RgbColor): void {
@@ -89,13 +77,11 @@ export async function createTileGrid(canvas: HTMLCanvasElement, world: World, op
 
   const tileLayer = new Container();
   const gridLinesLayer = new Graphics();
-  const glowLayer = new Container();
   const densityGlyphLayer = new Graphics();
   const congestionEdgeLayer = new Graphics();
   const selectionOutline = new Graphics();
-  glowLayer.filters = [new BlurFilter({ strength: 6 })];
 
-  app.stage.addChild(tileLayer, gridLinesLayer, glowLayer, densityGlyphLayer, congestionEdgeLayer, selectionOutline);
+  app.stage.addChild(tileLayer, gridLinesLayer, densityGlyphLayer, congestionEdgeLayer, selectionOutline);
 
   const visuals: TileVisual[] = world.tiles.map((tile) => {
     const sprite = new Sprite(Texture.WHITE);
@@ -105,39 +91,12 @@ export async function createTileGrid(canvas: HTMLCanvasElement, world: World, op
     sprite.height = tileSize;
     sprite.tint = 0x000000;
     tileLayer.addChild(sprite);
-    return { x: tile.x, y: tile.y, sprite, current: { r: 0, g: 0, b: 0 }, glow: null, glowPhase: Math.random() * Math.PI * 2 };
+    return { x: tile.x, y: tile.y, sprite, current: { r: 0, g: 0, b: 0 } };
   });
 
   // Grid lines are static geometry (tile positions never change) — drawn once, not redrawn per frame.
   for (const tile of world.tiles) {
     gridLinesLayer.rect(tile.x * tileSize + 0.5, tile.y * tileSize + 0.5, tileSize - 1, tileSize - 1).stroke({ width: 1, color: 0x000000, alpha: 0.18 });
-  }
-
-  function updateGlow(currentWorld: World, nowMs: number): void {
-    const sortedLandValues = currentWorld.tiles.map((t) => t.landValue).sort((a, b) => a - b);
-    const thresholdIndex = Math.floor(sortedLandValues.length * HIGH_LAND_VALUE_PERCENTILE);
-    const highValueThreshold = sortedLandValues[thresholdIndex] ?? Infinity;
-
-    currentWorld.tiles.forEach((tile, i) => {
-      const v = visuals[i]!;
-      const qualifies = tile.businessId !== null || tile.landValue >= highValueThreshold;
-
-      if (!qualifies) {
-        if (v.glow) v.glow.visible = false;
-        return;
-      }
-
-      if (!v.glow) {
-        const cx = v.x * tileSize + tileSize / 2;
-        const cy = v.y * tileSize + tileSize / 2;
-        const g = new Graphics().circle(cx, cy, tileSize * GLOW_RADIUS_FACTOR).fill({ color: GLOW_COLOR });
-        glowLayer.addChild(g);
-        v.glow = g;
-      }
-      v.glow.visible = true;
-      const phase = (nowMs / 1000) * GLOW_PULSE_HZ * Math.PI * 2 + v.glowPhase;
-      v.glow.alpha = GLOW_MIN_ALPHA + (GLOW_MAX_ALPHA - GLOW_MIN_ALPHA) * (0.5 + 0.5 * Math.sin(phase));
-    });
   }
 
   function updateDensityGlyphs(currentWorld: World): void {
@@ -201,7 +160,7 @@ export async function createTileGrid(canvas: HTMLCanvasElement, world: World, op
       .stroke({ width: 3, color: SELECTION_OUTLINE_COLOR });
   }
 
-  function update(currentWorld: World, overlay: OverlayMode, highlightTileId: string | null, nowMs: number): LegendInfo {
+  function update(currentWorld: World, overlay: OverlayMode, highlightTileId: string | null): LegendInfo {
     let legend: LegendInfo;
 
     if (overlay === "landUse" || overlay === "roads") {
@@ -242,7 +201,6 @@ export async function createTileGrid(canvas: HTMLCanvasElement, world: World, op
       }
     }
 
-    updateGlow(currentWorld, nowMs);
     updateSelection(currentWorld, highlightTileId);
 
     return legend;
