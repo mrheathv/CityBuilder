@@ -66,6 +66,70 @@
         display: none;
       }
 
+      /* The single always-visible line that gives the player a point:
+         what to work toward and how close they are. Distinct amber accent
+         so it reads as "the goal" and not just another stat. */
+      #objective-banner {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 6px 12px;
+        border-bottom: 1px solid #333;
+        font-size: 13px;
+        background: #201d16;
+      }
+      #objective-banner .goal-icon {
+        font-size: 14px;
+      }
+      #objective-text {
+        color: #f0d99a;
+      }
+      #objective-bar-track {
+        flex: 0 0 140px;
+        height: 8px;
+        background: #2c2c2c;
+        border: 1px solid #555;
+        border-radius: 4px;
+        overflow: hidden;
+      }
+      #objective-bar-fill {
+        height: 100%;
+        width: 0%;
+        background: linear-gradient(90deg, #b8933a, #f7c948);
+        transition: width 0.4s ease-out;
+      }
+
+      /* Short, dismissible first-run guidance — one tip at a time, out of
+         the way (and gone for good) the moment its step is done or the
+         player closes it. */
+      #onboarding {
+        display: none;
+        position: relative;
+        margin: 8px 12px 0 12px;
+        padding: 9px 36px 9px 12px;
+        background: #1f2c40;
+        border: 1px solid #3a5a86;
+        border-radius: 6px;
+        font-size: 12.5px;
+        line-height: 1.5;
+      }
+      #onboarding.visible {
+        display: block;
+      }
+      #onboarding-dismiss {
+        position: absolute;
+        top: 4px;
+        right: 4px;
+        min-width: 32px;
+        min-height: 32px;
+        padding: 0;
+        font-size: 16px;
+        line-height: 1;
+      }
+
+      .toolbar-group {
+        position: relative;
+      }
       .toolbar {
         display: flex;
         flex-wrap: wrap;
@@ -97,6 +161,36 @@
         background: #3a5a86;
         border-color: #7ab0ff;
         color: #fff;
+      }
+
+      /* "Data" and "More" both expand a floating row below their toolbar
+         instead of shifting the canvas down — anchored to .toolbar-group
+         (not .toolbar itself, which scrolls horizontally on mobile and
+         would clip an absolutely-positioned child). */
+      .floating-panel {
+        display: none;
+      }
+      .floating-panel.open {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        align-items: center;
+        position: absolute;
+        top: 100%;
+        left: 12px;
+        right: 12px;
+        background: #232323;
+        border: 1px solid #555;
+        border-radius: 6px;
+        padding: 8px 10px;
+        z-index: 6;
+        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+      }
+      .more-divider {
+        width: 1px;
+        align-self: stretch;
+        background: #444;
+        margin: 0 2px;
       }
 
       #main {
@@ -334,6 +428,13 @@
           box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
         }
 
+        #objective-banner {
+          font-size: 12px;
+        }
+        #objective-bar-track {
+          flex: 0 0 90px;
+        }
+
         /* Overlay/tool switching stays exactly one tap away, no drawer —
            just a compact, horizontally-scrollable single row instead of
            wrapping across several vertical rows and pushing the canvas
@@ -464,11 +565,7 @@
         <button id="hud-menu-toggle" aria-label="More stats and controls">&#9776;</button>
         <div id="hud-secondary-panel">
           <span><span class="label">Tick</span> <span class="value" id="hud-tick">0</span></span>
-          <span>
-            <span class="label">Tax rate</span> <span class="value" id="hud-tax">0%</span>
-            <button id="tax-down">-5%</button><button id="tax-up">+5%</button>
-          </span>
-          <span><span class="label">Overlay</span> <span class="value" id="hud-overlay">-</span></span>
+          <span><span class="label">View</span> <span class="value" id="hud-overlay">-</span></span>
           <span><span class="label">Tool</span> <span class="value" id="hud-tool">-</span></span>
           <span id="speed-controls">
             <span class="label">Speed</span> <span class="value" id="hud-speed">-</span>
@@ -481,28 +578,51 @@
         </div>
       </div>
 
-      <div class="toolbar" id="overlay-toolbar">
-        <span class="toolbar-label">Overlay [1-6]</span>
-        <button data-overlay="landValue">1 Land value</button>
-        <button data-overlay="occupancy">2 Population</button>
-        <button data-overlay="congestion">3 Congestion</button>
-        <button data-overlay="landUse">4 Land use</button>
-        <button data-overlay="density">5 Density</button>
-        <button data-overlay="roads">6 Roads</button>
+      <div id="objective-banner">
+        <span class="goal-icon">&#127919;</span>
+        <span id="objective-text">Goal: reach 0 population</span>
+        <div id="objective-bar-track"><div id="objective-bar-fill"></div></div>
       </div>
 
-      <div class="toolbar" id="tool-toolbar">
-        <span class="toolbar-label">Tool</span>
-        <button data-tool="inspect">Inspect</button>
-        <button data-tool="buildRoad">Build Road</button>
-        <button data-tool="removeRoad">Remove Road</button>
-        <button data-tool="zoneResidential">Zone Residential</button>
-        <button data-tool="zoneCommercial">Zone Commercial</button>
-        <button data-tool="buildJobCenter">Build Job Center</button>
-        <button data-tool="removeJobCenter">Remove Job Center</button>
-        <button data-tool="unzone">Unzone</button>
-        <button data-tool="buildAmenity">Build Park</button>
-        <button data-tool="removeAmenity">Remove Park</button>
+      <div id="onboarding">
+        <button id="onboarding-dismiss" aria-label="Dismiss">&times;</button>
+        <div id="onboarding-text"></div>
+      </div>
+
+      <div class="toolbar-group">
+        <div class="toolbar" id="overlay-toolbar">
+          <button id="data-toggle">&#128202; Data</button>
+        </div>
+        <div class="floating-panel" id="data-panel">
+          <span class="toolbar-label">View [1-5, Esc to close]</span>
+          <button data-overlay="landValue">1 Land value</button>
+          <button data-overlay="occupancy">2 Population</button>
+          <button data-overlay="congestion">3 Congestion</button>
+          <button data-overlay="density">4 Density</button>
+          <button data-overlay="roads">5 Roads</button>
+        </div>
+      </div>
+
+      <div class="toolbar-group">
+        <div class="toolbar" id="tool-toolbar">
+          <span class="toolbar-label">Tool</span>
+          <button data-tool="inspect">Inspect</button>
+          <button data-tool="buildRoad">Road</button>
+          <button data-tool="zoneResidential">Zone Residential</button>
+          <button data-tool="zoneCommercial">Zone Commercial</button>
+          <button data-tool="buildJobCenter">Build Job Center</button>
+          <button id="more-toggle">More &#9662;</button>
+        </div>
+        <div class="floating-panel" id="more-panel">
+          <button data-tool="removeRoad">Remove Road</button>
+          <button data-tool="unzone">Unzone</button>
+          <button data-tool="removeJobCenter">Remove Job Center</button>
+          <button data-tool="buildAmenity">Build Park</button>
+          <button data-tool="removeAmenity">Remove Park</button>
+          <span class="more-divider"></span>
+          <span class="label">Tax rate</span> <span class="value" id="hud-tax">0%</span>
+          <button id="tax-down">-5%</button><button id="tax-up">+5%</button>
+        </div>
       </div>
 
       <div id="main">

@@ -70,6 +70,18 @@ async function main(): Promise<void> {
   const gameOverReason = document.getElementById("game-over-reason")!;
   const gameOverStats = document.getElementById("game-over-stats")!;
 
+  const objectiveText = document.getElementById("objective-text")!;
+  const objectiveBarFill = document.getElementById("objective-bar-fill")!;
+
+  const onboardingEl = document.getElementById("onboarding")!;
+  const onboardingText = document.getElementById("onboarding-text")!;
+  const onboardingDismissBtn = document.getElementById("onboarding-dismiss") as HTMLButtonElement;
+
+  const dataToggleBtn = document.getElementById("data-toggle") as HTMLButtonElement;
+  const dataPanel = document.getElementById("data-panel")!;
+  const moreToggleBtn = document.getElementById("more-toggle") as HTMLButtonElement;
+  const morePanel = document.getElementById("more-panel")!;
+
   type ToolName =
     | "inspect"
     | "zoneResidential"
@@ -107,6 +119,19 @@ async function main(): Promise<void> {
     removeAmenity: (tileId) => removeAmenity(world, tileId),
   };
 
+  /** Short, past-tense, player-facing confirmations — "done" framed as a game event, not a log line with a tile id in it. */
+  const ACTION_VERBS: Partial<Record<ToolName, string>> = {
+    buildRoad: "Road built.",
+    removeRoad: "Road removed.",
+    zoneResidential: "Zoned for housing.",
+    zoneCommercial: "Zoned for business.",
+    buildJobCenter: "Job center built.",
+    removeJobCenter: "Job center removed.",
+    unzone: "Unzoned.",
+    buildAmenity: "Park built.",
+    removeAmenity: "Park removed.",
+  };
+
   type Speed = 0 | 1 | 2 | 4;
   const SPEED_LABELS: Record<Speed, string> = { 0: "Paused", 1: "1x", 2: "2x", 4: "4x" };
 
@@ -118,11 +143,64 @@ async function main(): Promise<void> {
   // drilling into a household/business from inside the sheet opens it. Has
   // no effect on desktop, where #info is always visible inline regardless.
   let infoSheetOpen = false;
-  let overlay: OverlayMode = "landValue";
+  // The default view is always the actual city (land use) — a heatmap is
+  // never what a new player sees on load. The four analytical fields plus
+  // the roads-connectivity diagnostic only render while "Data" mode is on.
+  let overlay: OverlayMode = "landUse";
+  let dataMode = false;
+  /** Remembered across toggling Data mode off/on, so reopening it returns to whatever you were last looking at instead of always resetting to Land value. */
+  let lastDataOverlay: OverlayMode = "landValue";
+  let moreOpen = false;
   let tool: ToolName = "inspect";
   let speed: Speed = 1;
   let lastFrameTime: number | null = null;
   let accumulatorMs = 0;
+
+  /** Session-only counts of successful player actions, purely for onboarding step progression — never read by the sim. */
+  const playerActionCounts = { road: 0, zoneResidential: 0, buildJobCenter: 0 };
+
+  /**
+   * One tip at a time, in order, each waiting for the action it asked for
+   * before advancing — not a wall of text up front. Persisted in
+   * localStorage once finished or dismissed, so it never reappears after
+   * the first session.
+   */
+  const ONBOARDING_STORAGE_KEY = "citybuilder-onboarding-v1-done";
+  const ONBOARDING_STEPS: { text: () => string; done: () => boolean }[] = [
+    {
+      text: () => `Welcome! Goal: grow this city to ${world.params.populationGoal} population. Start by picking "Road," then click an empty tile touching the gray road grid to extend it out from downtown.`,
+      done: () => playerActionCounts.road > 0,
+    },
+    {
+      text: () => `Nice, a new road. Now pick "Zone Residential" and click an empty tile next to it — people need somewhere to live before they'll move in.`,
+      done: () => playerActionCounts.zoneResidential > 0,
+    },
+    {
+      text: () => `Good. Now give them work: pick "Zone Commercial" on an empty tile, then "Build Job Center" on that same tile.`,
+      done: () => playerActionCounts.buildJobCenter > 0,
+    },
+  ];
+  let onboardingIndex = 0;
+  let onboardingDismissed = localStorage.getItem(ONBOARDING_STORAGE_KEY) === "1";
+
+  function dismissOnboarding(): void {
+    onboardingDismissed = true;
+    localStorage.setItem(ONBOARDING_STORAGE_KEY, "1");
+    onboardingEl.classList.remove("visible");
+  }
+
+  function renderOnboarding(): void {
+    if (onboardingDismissed) return;
+    while (onboardingIndex < ONBOARDING_STEPS.length && ONBOARDING_STEPS[onboardingIndex]!.done()) {
+      onboardingIndex++;
+    }
+    if (onboardingIndex >= ONBOARDING_STEPS.length) {
+      dismissOnboarding();
+      return;
+    }
+    onboardingEl.classList.add("visible");
+    onboardingText.textContent = ONBOARDING_STEPS[onboardingIndex]!.text();
+  }
 
   function escapeHtml(s: string): string {
     return s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
@@ -313,11 +391,20 @@ async function main(): Promise<void> {
     hudPopulationGoal.textContent = String(world.params.populationGoal);
     hudTreasury.textContent = `$${world.player.treasury.toFixed(0)}`;
     hudTax.textContent = `${(world.player.taxRate * 100).toFixed(0)}%`;
-    hudOverlay.textContent = OVERLAY_LABELS[overlay];
+    hudOverlay.textContent = overlay === "landUse" ? "City view" : OVERLAY_LABELS[overlay];
     hudTool.textContent = TOOL_LABELS[tool];
     hudSpeed.textContent = SPEED_LABELS[speed];
     renderTrend(hudPopulationTrend, world.history.map((h) => h.population));
     renderTrend(hudTreasuryTrend, world.history.map((h) => h.treasury));
+  }
+
+  /** The single always-visible line that gives the player a point: what to work toward and how close they are. */
+  function renderObjective(): void {
+    const current = world.households.size;
+    const goal = world.params.populationGoal;
+    const pct = Math.max(0, Math.min(100, Math.round((current / goal) * 100)));
+    objectiveText.textContent = `Goal: reach ${goal} population — ${current}/${goal} (${pct}%)`;
+    objectiveBarFill.style.width = `${pct}%`;
   }
 
   function renderGameOver(): void {
@@ -337,23 +424,76 @@ async function main(): Promise<void> {
     `;
   }
 
+  /** Population thresholds worth calling out on the way to the goal — regenerated if populationGoal itself ever changes. */
+  const MILESTONES: number[] = [];
+  for (let m = 50; m < world.params.populationGoal; m += 50) MILESTONES.push(m);
+  let nextMilestoneIndex = 0;
+  while (nextMilestoneIndex < MILESTONES.length && world.households.size >= MILESTONES[nextMilestoneIndex]!) {
+    nextMilestoneIndex++;
+  }
+
+  let feedbackTimer: ReturnType<typeof setTimeout> | null = null;
+  /** A brief on-screen line so an action feels acknowledged — clears itself after a few seconds instead of sitting there stale. */
+  function setFeedback(text: string): void {
+    feedbackEl.textContent = text;
+    if (feedbackTimer) clearTimeout(feedbackTimer);
+    feedbackTimer = setTimeout(() => {
+      feedbackEl.textContent = "";
+      feedbackTimer = null;
+    }, 4000);
+  }
+
+  /** Fires once per threshold crossed, whether growth came from a player action or just simulated ticks passing. */
+  function checkMilestones(): void {
+    if (nextMilestoneIndex >= MILESTONES.length) return;
+    if (world.households.size >= MILESTONES[nextMilestoneIndex]!) {
+      setFeedback(`🎉 Population reached ${MILESTONES[nextMilestoneIndex]}!`);
+      nextMilestoneIndex++;
+    }
+  }
+
   function render(): void {
     const legend = tileGrid.update(world, overlay, resolveHighlightTileId());
     renderLegend(legend);
     renderHud();
+    renderObjective();
+    renderOnboarding();
     renderInfo();
     renderGameOver();
   }
 
   function setOverlay(next: OverlayMode): void {
     overlay = next;
-    document.querySelectorAll<HTMLButtonElement>("#overlay-toolbar button").forEach((b) => b.classList.toggle("active", b.dataset.overlay === next));
+    document.querySelectorAll<HTMLButtonElement>("[data-overlay]").forEach((b) => b.classList.toggle("active", b.dataset.overlay === next));
     render();
+  }
+
+  /** Opens Data mode (if not already open) and jumps straight to the requested analytical view — used by both the panel buttons and the number-key shortcuts. */
+  function activateDataOverlay(mode: OverlayMode): void {
+    dataMode = true;
+    lastDataOverlay = mode;
+    dataToggleBtn.classList.add("active");
+    dataPanel.classList.add("open");
+    setOverlay(mode);
+  }
+
+  /** Toggling Data off always returns to the plain city view — the whole point is that the heatmaps are a mode you visit, not the default. */
+  function setDataMode(open: boolean): void {
+    dataMode = open;
+    dataToggleBtn.classList.toggle("active", open);
+    dataPanel.classList.toggle("open", open);
+    setOverlay(open ? lastDataOverlay : "landUse");
+  }
+
+  function setMoreOpen(open: boolean): void {
+    moreOpen = open;
+    moreToggleBtn.classList.toggle("active", open);
+    morePanel.classList.toggle("open", open);
   }
 
   function setTool(next: ToolName): void {
     tool = next;
-    document.querySelectorAll<HTMLButtonElement>("#tool-toolbar button").forEach((b) => b.classList.toggle("active", b.dataset.tool === next));
+    document.querySelectorAll<HTMLButtonElement>("[data-tool]").forEach((b) => b.classList.toggle("active", b.dataset.tool === next));
     renderHud();
   }
 
@@ -366,23 +506,28 @@ async function main(): Promise<void> {
     renderHud();
   }
 
-  document.querySelectorAll<HTMLButtonElement>("#overlay-toolbar button").forEach((btn) => {
-    btn.addEventListener("click", () => setOverlay(btn.dataset.overlay as OverlayMode));
+  document.querySelectorAll<HTMLButtonElement>("#data-panel button[data-overlay]").forEach((btn) => {
+    btn.addEventListener("click", () => activateDataOverlay(btn.dataset.overlay as OverlayMode));
   });
 
-  document.querySelectorAll<HTMLButtonElement>("#tool-toolbar button").forEach((btn) => {
+  dataToggleBtn.addEventListener("click", () => setDataMode(!dataMode));
+  moreToggleBtn.addEventListener("click", () => setMoreOpen(!moreOpen));
+
+  document.querySelectorAll<HTMLButtonElement>("[data-tool]").forEach((btn) => {
     const name = btn.dataset.tool as ToolName;
     btn.textContent = TOOL_LABELS[name];
     btn.addEventListener("click", () => setTool(name));
   });
 
+  onboardingDismissBtn.addEventListener("click", dismissOnboarding);
+
   document.addEventListener("keydown", (e) => {
-    if (e.key === "1") setOverlay("landValue");
-    else if (e.key === "2") setOverlay("occupancy");
-    else if (e.key === "3") setOverlay("congestion");
-    else if (e.key === "4") setOverlay("landUse");
-    else if (e.key === "5") setOverlay("density");
-    else if (e.key === "6") setOverlay("roads");
+    if (e.key === "1") activateDataOverlay("landValue");
+    else if (e.key === "2") activateDataOverlay("occupancy");
+    else if (e.key === "3") activateDataOverlay("congestion");
+    else if (e.key === "4") activateDataOverlay("density");
+    else if (e.key === "5") activateDataOverlay("roads");
+    else if (e.key === "0" || e.key === "Escape") setDataMode(false);
   });
 
   canvas.addEventListener("click", (e) => {
@@ -402,7 +547,14 @@ async function main(): Promise<void> {
     const action = TOOL_ACTIONS[tool];
     if (action) {
       const result = action(clickedTile.id);
-      feedbackEl.textContent = result.ok ? `${TOOL_LABELS[tool]} on ${clickedTile.id}: done.` : `${TOOL_LABELS[tool]} on ${clickedTile.id}: ${result.reason}`;
+      if (result.ok) {
+        setFeedback(`✅ ${ACTION_VERBS[tool] ?? "Done."}`);
+        if (tool === "buildRoad") playerActionCounts.road++;
+        else if (tool === "zoneResidential") playerActionCounts.zoneResidential++;
+        else if (tool === "buildJobCenter") playerActionCounts.buildJobCenter++;
+      } else {
+        setFeedback(`⚠️ ${result.reason}`);
+      }
       selected = { kind: "tile", id: clickedTile.id };
       // Deliberately doesn't open the sheet - a build/zone tap shouldn't
       // interrupt rapid-fire zoning with a popup every time.
@@ -444,6 +596,7 @@ async function main(): Promise<void> {
 
   stepBtn.addEventListener("click", () => {
     tick(world);
+    checkMilestones();
     render();
   });
 
@@ -484,6 +637,7 @@ async function main(): Promise<void> {
         tick(world);
         accumulatorMs -= msPerTick;
       }
+      checkMilestones();
     }
 
     render();
