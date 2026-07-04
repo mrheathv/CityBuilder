@@ -1,5 +1,5 @@
-import { distance } from "./geometry.js";
 import { homeTileOf, pushLog } from "./household.js";
+import { networkDistanceToBusiness } from "./roadNetwork.js";
 import type { Household, World } from "./types.js";
 
 /**
@@ -18,7 +18,6 @@ export function businessHiring(world: World): void {
   }
 
   for (const business of businessOrder) {
-    const tile = world.tilesById.get(business.tileId)!;
     for (const jobId of business.jobSlotIds) {
       const job = world.jobSlots.get(jobId)!;
       if (job.occupantId !== null) continue;
@@ -30,7 +29,7 @@ export function businessHiring(world: World): void {
       for (const id of candidateIds) {
         const candidate = world.households.get(id)!;
         const homeTile = homeTileOf(world, candidate);
-        const d = homeTile ? distance(tile.x, tile.y, homeTile.x, homeTile.y) : 0;
+        const d = homeTile ? networkDistanceToBusiness(world, homeTile, business.id) : 0;
         if (d < bestDistance) {
           bestDistance = d;
           best = candidate;

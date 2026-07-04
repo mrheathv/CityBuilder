@@ -61,21 +61,25 @@ export function collectTaxes(world: World): void {
 
 /**
  * The spending side of the challenge: every existing job center costs upkeep
- * regardless of who built it (worldgen's or the player's) or whether its jobs
- * are filled — a city inherits maintenance costs along with its businesses.
- * Every point of player-invested amenity (tile.investedAmenity, never the
- * world-gen baseline) costs upkeep too. This is what makes unchecked
- * expansion actually risky: more job centers and parks mean more guaranteed
- * spending every tick, whether or not tax revenue keeps pace.
+ * regardless of who built it (worldgen's or the player's) or whether its
+ * jobs are filled — a city inherits maintenance costs along with its
+ * businesses. Every existing park and every existing road tile cost upkeep
+ * too (world-gen's own boulevard grid included) — this is what makes
+ * unchecked expansion of ANY kind actually risky: more job centers, parks,
+ * and road tiles all mean more guaranteed spending every tick, whether or
+ * not tax revenue keeps pace.
  */
 export function applyUpkeep(world: World): void {
   const jobCenterUpkeep = world.businesses.size * world.params.jobCenterUpkeepPerTick;
+  const parkUpkeep = world.amenities.size * world.params.parkUpkeepPerTick;
 
-  let investedAmenityTotal = 0;
-  for (const tile of world.tiles) investedAmenityTotal += tile.investedAmenity;
-  const amenityUpkeep = investedAmenityTotal * world.params.amenityUpkeepPerPoint;
+  let roadTileCount = 0;
+  for (const tile of world.tiles) {
+    if (tile.use === "road") roadTileCount++;
+  }
+  const roadUpkeep = roadTileCount * world.params.roadUpkeepPerTick;
 
-  const totalUpkeep = jobCenterUpkeep + amenityUpkeep;
+  const totalUpkeep = jobCenterUpkeep + parkUpkeep + roadUpkeep;
   world.player.lastUpkeepCost = totalUpkeep;
   world.player.treasury -= totalUpkeep;
 }

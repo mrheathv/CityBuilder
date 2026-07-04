@@ -1,4 +1,6 @@
 import { commuteCost, currentUtility, homeTileOf, jobTileOf } from "./household.js";
+import { distance, tileIndex } from "./geometry.js";
+import { nearestJobCenter } from "./roadNetwork.js";
 import type { DevelopmentChange, World } from "./types.js";
 
 export interface HouseholdInspection {
@@ -49,10 +51,14 @@ export interface TileInspection {
   use: string;
   landValue: number;
   landValueBreakdown: { jobAccess: number; amenity: number; congestion: number };
-  /** Portion of landValueBreakdown.amenity that's player-funded (and therefore costs upkeep), vs. the world-gen baseline. */
-  investedAmenity: number;
   units: { id: string; rent: number; occupantHouseholdId: string | null }[];
   businessId: string | null;
+  /** Whether this tile can reach at least one business through the road network at all. */
+  connected: boolean;
+  /** The closest business this tile can reach by road, and how far — null if disconnected from every business. */
+  nearestJobCenter: { businessId: string; networkDistance: number; straightLineDistance: number } | null;
+  /** Parks whose radius reaches this tile, nearest first — why the amenity number is what it is. */
+  nearbyParks: { id: string; distance: number; strength: number }[];
   /** 0 for non-residential tiles; 1 (house) to 4 (tower) otherwise. */
   developmentLevel: number;
   /** Current housing-unit capacity at this tile's developmentLevel (housingUnitIds.length, the actual source of truth). */
@@ -74,6 +80,20 @@ export function inspectTile(world: World, tileId: string): TileInspection | null
     return { id: unit.id, rent: unit.rent, occupantHouseholdId: unit.occupantId };
   });
 
+  const i = tileIndex(world.width, tile.x, tile.y);
+  const connected = world.network.connectedByTile[i] === 1;
+  const nearest = nearestJobCenter(world, tile);
+  const nearestBusinessTile = nearest ? world.tilesById.get(world.businesses.get(nearest.businessId)!.tileId)! : null;
+
+  const nearbyParks = Array.from(world.amenities.values())
+    .map((park) => {
+      const parkTile = world.tilesById.get(park.tileId)!;
+      return { id: park.id, distance: distance(tile.x, tile.y, parkTile.x, parkTile.y), strength: park.strength, radius: park.radius };
+    })
+    .filter((p) => p.distance <= p.radius)
+    .sort((a, b) => a.distance - b.distance)
+    .map(({ id, distance: d, strength }) => ({ id, distance: d, strength }));
+
   return {
     id: tile.id,
     x: tile.x,
@@ -81,9 +101,17 @@ export function inspectTile(world: World, tileId: string): TileInspection | null
     use: tile.use,
     landValue: tile.landValue,
     landValueBreakdown: tile.landValueBreakdown,
-    investedAmenity: tile.investedAmenity,
     units,
     businessId: tile.businessId,
+    connected,
+    nearestJobCenter: nearest
+      ? {
+          businessId: nearest.businessId,
+          networkDistance: nearest.networkDistance,
+          straightLineDistance: distance(tile.x, tile.y, nearestBusinessTile!.x, nearestBusinessTile!.y),
+        }
+      : null,
+    nearbyParks,
     developmentLevel: tile.developmentLevel,
     developmentCapacity: tile.housingUnitIds.length,
     growthStreak: tile.growthStreak,

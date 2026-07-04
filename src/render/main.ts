@@ -4,13 +4,15 @@ import { inspectBusiness, inspectHousehold, inspectTile } from "../sim/inspect.j
 import type { BusinessInspection, HouseholdInspection, TileInspection } from "../sim/inspect.js";
 import {
   buildJobCenter,
-  investInAmenity,
+  buildRoad,
   removeJobCenter,
+  removeRoad,
   setTaxRate,
   unzoneTile,
   zoneCommercial,
   zoneResidential,
 } from "../sim/playerActions.js";
+import { buildAmenity, removeAmenity } from "../sim/amenity.js";
 import type { ActionResult } from "../sim/playerActions.js";
 import { OVERLAY_LABELS } from "./overlayData.js";
 import type { LegendInfo, OverlayMode } from "./overlayData.js";
@@ -68,7 +70,17 @@ async function main(): Promise<void> {
   const gameOverReason = document.getElementById("game-over-reason")!;
   const gameOverStats = document.getElementById("game-over-stats")!;
 
-  type ToolName = "inspect" | "zoneResidential" | "zoneCommercial" | "buildJobCenter" | "removeJobCenter" | "unzone" | "investAmenity";
+  type ToolName =
+    | "inspect"
+    | "zoneResidential"
+    | "zoneCommercial"
+    | "buildJobCenter"
+    | "removeJobCenter"
+    | "unzone"
+    | "buildRoad"
+    | "removeRoad"
+    | "buildAmenity"
+    | "removeAmenity";
 
   const TOOL_LABELS: Record<ToolName, string> = {
     inspect: "Inspect",
@@ -77,7 +89,10 @@ async function main(): Promise<void> {
     buildJobCenter: `Build Job Center ($${world.params.buildJobCenterCost})`,
     removeJobCenter: "Remove Job Center",
     unzone: "Unzone",
-    investAmenity: `Invest Amenity ($${world.params.amenityInvestmentCost})`,
+    buildRoad: `Build Road ($${world.params.roadBuildCost})`,
+    removeRoad: "Remove Road",
+    buildAmenity: `Build Park ($${world.params.parkBuildCost})`,
+    removeAmenity: "Remove Park",
   };
 
   const TOOL_ACTIONS: Partial<Record<ToolName, (tileId: string) => ActionResult>> = {
@@ -86,7 +101,10 @@ async function main(): Promise<void> {
     buildJobCenter: (tileId) => buildJobCenter(world, tileId),
     removeJobCenter: (tileId) => removeJobCenter(world, tileId),
     unzone: (tileId) => unzoneTile(world, tileId),
-    investAmenity: (tileId) => investInAmenity(world, tileId),
+    buildRoad: (tileId) => buildRoad(world, tileId),
+    removeRoad: (tileId) => removeRoad(world, tileId),
+    buildAmenity: (tileId) => buildAmenity(world, tileId),
+    removeAmenity: (tileId) => removeAmenity(world, tileId),
   };
 
   type Speed = 0 | 1 | 2 | 4;
@@ -126,7 +144,23 @@ async function main(): Promise<void> {
       `  job access:  ${bd.jobAccess.toFixed(2)}`,
       `  amenity:     ${bd.amenity.toFixed(2)}`,
       `  congestion: -${bd.congestion.toFixed(2)}`,
+      ``,
     ];
+    if (!t.connected) {
+      lines.push(`<span class="section-title">Network: not connected</span>`, `  no road links this tile to any job center — job access is 0 until it's connected.`);
+    } else if (t.nearestJobCenter) {
+      const nj = t.nearestJobCenter;
+      lines.push(
+        `<span class="section-title">Network: connected</span>`,
+        `  nearest job center ${nj.businessId}: ${nj.networkDistance.toFixed(1)} tiles by road (${nj.straightLineDistance} tiles straight-line)`,
+      );
+    }
+    if (t.nearbyParks.length > 0) {
+      lines.push(``, `<span class="section-title">Nearby parks (${t.nearbyParks.length})</span>`);
+      for (const p of t.nearbyParks) {
+        lines.push(`  ${p.id}: ${p.distance} tiles away, +${p.strength.toFixed(1)} amenity`);
+      }
+    }
     if (t.use === "residential") {
       const label = DEVELOPMENT_LABELS[t.developmentLevel] ?? String(t.developmentLevel);
       lines.push(``, `<span class="section-title">Development: level ${t.developmentLevel} (${label}), capacity ${t.developmentCapacity}</span>`);
@@ -348,6 +382,7 @@ async function main(): Promise<void> {
     else if (e.key === "3") setOverlay("congestion");
     else if (e.key === "4") setOverlay("landUse");
     else if (e.key === "5") setOverlay("density");
+    else if (e.key === "6") setOverlay("roads");
   });
 
   canvas.addEventListener("click", (e) => {

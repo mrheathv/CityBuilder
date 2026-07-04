@@ -1,6 +1,6 @@
 import type { Rng } from "./rng.js";
 
-export type TileUse = "empty" | "residential" | "commercial";
+export type TileUse = "empty" | "residential" | "commercial" | "road" | "park";
 
 export interface LandValueBreakdown {
   jobAccess: number;
@@ -17,15 +17,23 @@ export interface DevelopmentChange {
   reason: string;
 }
 
+/** A placed park/amenity object — the amenity field is emergent from these (falloff by distance), never painted directly onto tiles. */
+export interface AmenityObject {
+  id: string;
+  tileId: string;
+  strength: number;
+  radius: number;
+}
+
 export interface Tile {
   id: string;
   x: number;
   y: number;
   use: TileUse;
-  /** Static baseline set once at world-gen (e.g. proximity to a park/geography feature), plus any player amenity investment. */
+  /** Static baseline set once at world-gen (proximity to a geography feature) — never changes after creation. */
+  baselineAmenity: number;
+  /** Emergent: baselineAmenity + falloff contribution from every AmenityObject within reach. Recomputed every tick by computeAmenityField. Never set directly. */
   amenity: number;
-  /** Cumulative amenity added by investInAmenity specifically (a subset of `amenity`) — tracked separately so upkeep bills only the player-funded portion, never the world-gen baseline. */
-  investedAmenity: number;
   /** Emergent, recomputed every tick from current world state. Never set directly. */
   landValue: number;
   landValueBreakdown: LandValueBreakdown;
@@ -33,6 +41,8 @@ export interface Tile {
   housingUnitIds: string[];
   /** Populated only when use === 'commercial'. */
   businessId: string | null;
+  /** Populated only when use === 'park'. */
+  amenityObjectId: string | null;
   /**
    * Building density, meaningful only when use === 'residential': 0 for
    * non-residential tiles, 1 (house) to 4 (tower) otherwise. Housing-unit
@@ -131,14 +141,10 @@ export interface Household {
 }
 
 export interface SimParams {
-  /** Cost per unit of Chebyshev distance between home and job, per tick. */
+  /** Cost per unit of NETWORK distance (shortest path along roads) between home and job, per tick. */
   commuteCostPerDistance: number;
-  /** Exponential decay rate for job access contribution vs. distance. */
+  /** Exponential decay rate for job access contribution vs. network distance. */
   jobAccessDecay: number;
-  /** Radius (tiles) over which residential density contributes to a tile's congestion. */
-  congestionRadius: number;
-  /** Weight applied to local housing density when computing congestion drag on land value. */
-  congestionWeight: number;
   /** Smoothing factor (0-1) for rent easing toward its target each tick. */
   rentAdjustSpeed: number;
   /** Scales land value into a nominal rent target. */
@@ -174,12 +180,14 @@ export interface SimParams {
   jobCenterJobSlots: number;
   /** Wage paid by every slot at a new job center. */
   jobCenterWage: number;
-  /** Cost per amenity investment action. */
-  amenityInvestmentCost: number;
-  /** Flat amenity increase applied to every tile within amenityInvestmentRadius. */
-  amenityInvestmentAmount: number;
-  /** Radius (tiles) an amenity investment reaches, flat (no falloff). */
-  amenityInvestmentRadius: number;
+  /** Cost to place one park (amenity object). */
+  parkBuildCost: number;
+  /** Amenity contributed by a park to every tile within parkRadius (flat, no falloff within the radius). */
+  parkStrength: number;
+  /** Radius (tiles, Manhattan) a park's amenity effect reaches. Not road-routed — a park's calming effect isn't about traffic. */
+  parkRadius: number;
+  /** Cost to build one road tile. */
+  roadBuildCost: number;
 
   /**
    * Residential property tax is taxRate * landValue * (occupiedUnits / this).
@@ -190,8 +198,26 @@ export interface SimParams {
   residentialTaxUnitsPerLandValue: number;
   /** Charged every tick for every existing job center (business), regardless of who built it or whether its jobs are filled — city infrastructure costs money to keep running. */
   jobCenterUpkeepPerTick: number;
-  /** Charged every tick per point of player-invested amenity (tile.investedAmenity), not the static world-gen baseline. */
-  amenityUpkeepPerPoint: number;
+  /** Charged every tick for every existing park. */
+  parkUpkeepPerTick: number;
+  /** Charged every tick for every existing road tile — a network costs money to maintain, same as everything else. */
+  roadUpkeepPerTick: number;
+
+  /**
+   * How often (in ticks) the expensive network re-routing (Dijkstra over the
+   * road graph, one run per business) recomputes. Between recomputes, land
+   * value reads the last-cached job access/congestion values every tick —
+   * only this expensive step is throttled. Building/removing a road, job
+   * center, or park forces an immediate recompute regardless (see
+   * world.accessibilityDirty), so edits always feel responsive; this only
+   * governs the steady background refresh (e.g. as congestion shifts from
+   * ongoing commuting with no player action at all).
+   */
+  accessibilityRecomputeIntervalTicks: number;
+  /** How much one commuter on a road edge raises that edge's effective travel cost for the next recompute's routing (weight = 1 + this * commuterCount). */
+  congestionWeightPerCommuter: number;
+  /** How much a tile's worst adjacent road edge's congestion drags down that tile's land value. */
+  congestionLandValueWeight: number;
 
   /** Households the player must reach to win. */
   populationGoal: number;
@@ -245,6 +271,30 @@ export interface HistoryPoint {
   treasury: number;
 }
 
+/**
+ * Everything derived from routing along the road network — rebuilt in one
+ * shot by recomputeNetwork, read by everything else (land value, commute
+ * cost, inspect) between rebuilds. Never partially updated; a recompute
+ * always replaces every field together so nothing reads a stale distance
+ * table against a fresh congestion map or vice versa.
+ */
+export interface NetworkCache {
+  /** world.tick the last time recomputeNetwork actually ran. */
+  lastRecomputeTick: number;
+  /** businessId -> network distance from that business to every tile, indexed by tileIndex(width, x, y). Infinity where unreached. */
+  businessDistance: Map<string, Float64Array>;
+  /** businessId -> predecessor tile index along the shortest path back from that business, for path reconstruction. -1 where none/unreached/is the source. */
+  businessPredecessor: Map<string, Int32Array>;
+  /** Cached per-tile job access (what computeLandValues reads every tick), indexed by tileIndex. */
+  jobAccessByTile: Float64Array;
+  /** Cached per-tile congestion-at-my-doorstep (worst adjacent edge), indexed by tileIndex. */
+  congestionByTile: Float64Array;
+  /** Raw commuter count per road edge this cycle, keyed by a canonical "minIndex|maxIndex" string. Drives both next cycle's edge weights and the Congestion overlay's segment rendering. */
+  edgeCongestion: Map<string, number>;
+  /** Whether each tile is reachable from at least one business, indexed by tileIndex — surfaced directly in inspect rather than inferred from a near-zero access number. */
+  connectedByTile: Uint8Array;
+}
+
 export interface World {
   tick: number;
   seed: number;
@@ -258,7 +308,11 @@ export interface World {
   jobSlots: Map<string, JobSlot>;
   businesses: Map<string, Business>;
   households: Map<string, Household>;
+  amenities: Map<string, AmenityObject>;
   nextHouseholdSeq: number;
+  network: NetworkCache;
+  /** Set true by buildRoad/removeRoad/buildJobCenter/removeJobCenter to force an immediate recompute on the very next tick, instead of waiting for the periodic cadence. Cleared once a recompute runs. */
+  accessibilityDirty: boolean;
   player: PlayerState;
   game: GameState;
   /** Rolling window of recent ticks for trend/leading-indicator display, capped at HISTORY_LENGTH. */

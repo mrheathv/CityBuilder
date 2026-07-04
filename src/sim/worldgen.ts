@@ -2,6 +2,7 @@ import { createRng } from "./rng.js";
 import { defaultParams } from "./params.js";
 import { distance } from "./geometry.js";
 import { pushLog } from "./household.js";
+import { createEmptyNetworkCache, networkDistanceToBusiness, recomputeNetwork } from "./roadNetwork.js";
 import type {
   Business,
   Household,
@@ -22,6 +23,16 @@ export interface WorldGenOptions {
   /** Fraction of initial households that start with a job. */
   initialEmploymentRate?: number;
 }
+
+/**
+ * Grid-boulevard spacing: every 4th row and column is a road, carved out
+ * before the random zoning roll runs on whatever's left. Without this, a
+ * fresh city would have zero road tiles and therefore zero job access
+ * anywhere (the strict "a building needs an adjacent road" rule applies to
+ * world-gen too) — this guarantees a connected starting network with real
+ * 3x3 interior blocks left to zone.
+ */
+const ROAD_GRID_SPACING = 4;
 
 /** Builds a fresh World from a seed. All placement decisions draw from the seeded RNG only. */
 export function createWorld(opts: WorldGenOptions): World {
@@ -46,28 +57,34 @@ export function createWorld(opts: WorldGenOptions): World {
     for (let x = 0; x < width; x++) {
       const id = `t-${x}-${y}`;
       const dNorm = distance(x, y, cx, cy) / maxD; // 0 at center, 1 at corners
+      const isRoad = x % ROAD_GRID_SPACING === 0 || y % ROAD_GRID_SPACING === 0;
 
-      // Commercial clusters toward the center (a "downtown"); residential is
-      // roughly uniform; whatever's left is empty/vacant land.
-      const pCommercial = 0.32 * (1 - dNorm);
-      const pResidential = 0.42;
-      const roll = rng.next();
+      let use: Tile["use"];
+      if (isRoad) {
+        use = "road";
+      } else {
+        // Commercial clusters toward the center (a "downtown"); residential is
+        // roughly uniform; whatever's left is empty/vacant land.
+        const pCommercial = 0.32 * (1 - dNorm);
+        const pResidential = 0.42;
+        const roll = rng.next();
+        use = roll < pCommercial ? "commercial" : roll < pCommercial + pResidential ? "residential" : "empty";
+      }
 
-      const use = roll < pCommercial ? "commercial" : roll < pCommercial + pResidential ? "residential" : "empty";
-
-      const amenity = rng.next() * 5; // static baseline geography quality, never changes
+      const baselineAmenity = rng.next() * 5; // static geography quality, never changes
 
       const tile: Tile = {
         id,
         x,
         y,
         use,
-        amenity,
-        investedAmenity: 0,
+        baselineAmenity,
+        amenity: baselineAmenity,
         landValue: 0,
-        landValueBreakdown: { jobAccess: 0, amenity, congestion: 0 },
+        landValueBreakdown: { jobAccess: 0, amenity: baselineAmenity, congestion: 0 },
         housingUnitIds: [],
         businessId: null,
+        amenityObjectId: null,
         developmentLevel: 0,
         growthStreak: 0,
         decayStreak: 0,
@@ -139,11 +156,20 @@ export function createWorld(opts: WorldGenOptions): World {
     jobSlots,
     businesses,
     households,
+    amenities: new Map(),
     nextHouseholdSeq: 0,
+    network: createEmptyNetworkCache(width * height),
+    accessibilityDirty: true,
     player: { treasury: params.initialTreasury, taxRate: params.initialTaxRate, lastTaxRevenue: 0, lastUpkeepCost: 0 },
     game: { status: "playing", reason: null, ticksInsolvent: 0 },
     history: [],
   };
+
+  // Populate the network cache once, before seeding any households, so the
+  // initial employment pass below can route people to jobs they can actually
+  // reach by road instead of by straight-line distance — the same rule the
+  // rest of the sim lives by from tick 0 onward.
+  recomputeNetwork(world);
 
   // Seed initial households into a fraction of housing capacity, then give a
   // fraction of them a nearby job. Order is shuffled via the seeded RNG so
@@ -168,7 +194,7 @@ export function createWorld(opts: WorldGenOptions): World {
   for (let i = 0; i < numToEmploy; i++) {
     const household = seededHouseholds[i]!;
     const homeTile = homeTileOf(household);
-    const openSlot = findClosestVacantJobSlot(world, homeTile.x, homeTile.y);
+    const openSlot = findClosestVacantJobSlot(world, homeTile);
     if (!openSlot) continue;
     openSlot.occupantId = household.id;
     openSlot.vacantSinceTick = null;
@@ -198,12 +224,12 @@ function spawnHousehold(world: World): Household {
   return household;
 }
 
-function findClosestVacantJobSlot(world: World, x: number, y: number): JobSlot | null {
+/** Nearest vacant job slot BY NETWORK DISTANCE — a business unreachable by road never gets picked, same rule the rest of the sim lives by. */
+function findClosestVacantJobSlot(world: World, homeTile: Tile): JobSlot | null {
   let best: JobSlot | null = null;
   let bestD = Infinity;
   for (const business of world.businesses.values()) {
-    const tile = world.tilesById.get(business.tileId)!;
-    const d = distance(x, y, tile.x, tile.y);
+    const d = networkDistanceToBusiness(world, homeTile, business.id);
     if (d >= bestD) continue;
     for (const jobId of business.jobSlotIds) {
       const job = world.jobSlots.get(jobId)!;

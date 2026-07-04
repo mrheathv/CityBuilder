@@ -29,22 +29,25 @@ export function sequentialGradientCss(steps = 12): string {
   return `linear-gradient(to right, ${stops.join(", ")})`;
 }
 
-export type LandUseCategory = "empty" | "residential" | "commercialZoned" | "jobCenter";
+export type LandUseCategory = "empty" | "residential" | "commercialZoned" | "jobCenter" | "park" | "road";
 
 /**
- * Categorical palette for the 3 real land-use identities, checked with the
- * dataviz skill's validate_palette.js against this app's dark surface
- * (#1c1c1c): lightness band, chroma floor, CVD separation (worst adjacent
- * ΔE 21.5 under tritanopia, well past the ≥12 target), and contrast vs.
- * surface all passed. "Empty" is a deliberate neutral gray outside that
- * validated set — it's a "nothing built here" state, not a fourth identity
- * competing for hue budget.
+ * Categorical palette checked with the dataviz skill's validate_palette.js
+ * against this app's dark surface (#1c1c1c): lightness band, chroma floor,
+ * CVD separation, and contrast vs. surface. "park" (#1f9e6d) was added and
+ * validated alongside the original three real-identity colors with no new
+ * failures. "empty" and "road" are deliberate neutral grays outside that
+ * validated set, the same way "empty" always was — infrastructure and
+ * "nothing built here" aren't zoning identities competing for hue budget,
+ * they're just distinguished by lightness (light = nothing, dark = road).
  */
 export const LAND_USE_COLORS: Record<LandUseCategory, string> = {
   empty: "#d8d8d0",
   residential: "#008300",
   commercialZoned: "#3987e5",
   jobCenter: "#9085e9",
+  park: "#1f9e6d",
+  road: "#5a5a54",
 };
 
 export const LAND_USE_LABELS: Record<LandUseCategory, string> = {
@@ -52,9 +55,24 @@ export const LAND_USE_LABELS: Record<LandUseCategory, string> = {
   residential: "Residential",
   commercialZoned: "Commercial (zoned)",
   jobCenter: "Job center",
+  park: "Park",
+  road: "Road",
 };
 
 export const SELECTION_OUTLINE_COLOR = "#ffe400";
+
+/**
+ * Roads overlay: "connected" reuses the same asphalt gray as the land-use
+ * overlay's road color (still just "a road," not a new identity); "isolated"
+ * is a real warning color, validated standalone against the dark surface —
+ * a road tile with no path to any job center is a mistake worth flagging,
+ * not a passive state like "empty."
+ */
+export const ROAD_CATEGORY_COLORS = {
+  notRoad: "#d8d8d0",
+  connected: "#5a5a54",
+  isolated: "#e0574a",
+} as const;
 
 export interface RgbColor {
   r: number;

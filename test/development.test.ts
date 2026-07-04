@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { defaultParams } from "../src/sim/params.js";
 import { createRng } from "../src/sim/rng.js";
 import { developmentGrowth } from "../src/sim/development.js";
+import { createEmptyNetworkCache } from "../src/sim/roadNetwork.js";
 import type { HousingUnit, SimParams, Tile, World } from "../src/sim/types.js";
 
 /**
@@ -19,12 +20,13 @@ function makeSingleTileWorld(level: 1 | 2 | 3 | 4, occupiedCount: number, overri
     x: 0,
     y: 0,
     use: "residential",
+    baselineAmenity: 0,
     amenity: 0,
-    investedAmenity: 0,
     landValue: 0,
     landValueBreakdown: { jobAccess: 0, amenity: 0, congestion: 0 },
     housingUnitIds: [],
     businessId: null,
+    amenityObjectId: null,
     developmentLevel: level,
     growthStreak: 0,
     decayStreak: 0,
@@ -57,7 +59,10 @@ function makeSingleTileWorld(level: 1 | 2 | 3 | 4, occupiedCount: number, overri
     jobSlots: new Map(),
     businesses: new Map(),
     households: new Map(),
+    amenities: new Map(),
     nextHouseholdSeq: 0,
+    network: createEmptyNetworkCache(1),
+    accessibilityDirty: false,
     player: { treasury: params.initialTreasury, taxRate: params.initialTaxRate, lastTaxRevenue: 0, lastUpkeepCost: 0 },
     game: { status: "playing", reason: null, ticksInsolvent: 0 },
     history: [],
@@ -180,12 +185,13 @@ describe("developmentGrowth: growth", () => {
       x: 0,
       y: 0,
       use: "residential",
+      baselineAmenity: 0,
       amenity: 0,
-      investedAmenity: 0,
       landValue: params.growthLandValueThreshold,
       landValueBreakdown: { jobAccess: 0, amenity: 0, congestion: 0 },
       housingUnitIds: [],
       businessId: null,
+      amenityObjectId: null,
       developmentLevel: 1,
       growthStreak: 0,
       decayStreak: 0,
@@ -224,7 +230,10 @@ describe("developmentGrowth: growth", () => {
       jobSlots: new Map(),
       businesses: new Map(),
       households: new Map(),
+      amenities: new Map(),
       nextHouseholdSeq: 0,
+      network: createEmptyNetworkCache(2),
+      accessibilityDirty: false,
       player: { treasury: params.initialTreasury, taxRate: params.initialTaxRate, lastTaxRevenue: 0, lastUpkeepCost: 0 },
       game: { status: "playing", reason: null, ticksInsolvent: 0 },
       history: [],

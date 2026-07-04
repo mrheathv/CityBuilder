@@ -1,4 +1,4 @@
-import { distance } from "./geometry.js";
+import { networkDistanceToBusiness } from "./roadNetwork.js";
 import type { DecisionLogEntry, Household, HouseholdReason, HousingUnit, JobSlot, Tile, World } from "./types.js";
 
 export function homeTileOf(world: World, household: Household): Tile | null {
@@ -17,9 +17,18 @@ export function jobTileOf(world: World, household: Household): Tile | null {
   return world.tilesById.get(business.tileId) ?? null;
 }
 
+/**
+ * Network distance (through the road graph, cached by roadNetwork.ts), not
+ * straight-line — jobTile is always a business's own tile in every real call
+ * site, so its businessId indexes straight into the cached distance table.
+ * A disconnected home returns Infinity, which utility math naturally treats
+ * as "never worth it" without any special-casing (-Infinity utility loses
+ * every comparison against a finite alternative).
+ */
 export function commuteCost(world: World, homeTile: Tile | null, jobTile: Tile | null): number {
-  if (!homeTile || !jobTile) return 0;
-  return world.params.commuteCostPerDistance * distance(homeTile.x, homeTile.y, jobTile.x, jobTile.y);
+  if (!homeTile || !jobTile || !jobTile.businessId) return 0;
+  const networkDistance = networkDistanceToBusiness(world, homeTile, jobTile.businessId);
+  return world.params.commuteCostPerDistance * networkDistance;
 }
 
 /** Net utility of a household's current situation: income - rent - commute cost. */

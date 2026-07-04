@@ -2,19 +2,35 @@ import { describe, expect, it } from "vitest";
 import { createWorld } from "../src/sim/worldgen.js";
 import { computeLandValues } from "../src/sim/landValue.js";
 import { runTicks } from "../src/sim/tick.js";
+import { recomputeNetwork } from "../src/sim/roadNetwork.js";
 import {
   zoneResidential,
   zoneCommercial,
   buildJobCenter,
   removeJobCenter,
   unzoneTile,
-  investInAmenity,
+  buildRoad,
+  removeRoad,
   setTaxRate,
 } from "../src/sim/playerActions.js";
+import { buildAmenity, computeAmenityField } from "../src/sim/amenity.js";
 import { inspectTile } from "../src/sim/inspect.js";
+import { distance } from "../src/sim/geometry.js";
 
 function findEmptyTileId(world: ReturnType<typeof createWorld>): string {
   return world.tiles.find((t) => t.use === "empty")!.id;
+}
+
+/** An empty tile with at least one adjacent road tile — needed for tests where something built there must actually be reachable through the network. */
+function findConnectedEmptyTileId(world: ReturnType<typeof createWorld>): string {
+  for (const tile of world.tiles) {
+    if (tile.use !== "empty") continue;
+    const hasRoadNeighbor = world.tiles.some(
+      (t) => t.use === "road" && ((Math.abs(t.x - tile.x) === 1 && t.y === tile.y) || (Math.abs(t.y - tile.y) === 1 && t.x === tile.x)),
+    );
+    if (hasRoadNeighbor) return tile.id;
+  }
+  throw new Error("no connected empty tile found");
 }
 
 describe("zoning", () => {
@@ -67,6 +83,39 @@ describe("zoning", () => {
   });
 });
 
+describe("roads", () => {
+  it("buildRoad converts an empty tile to a road, deducts cost, and marks the network dirty", () => {
+    const world = createWorld({ seed: 1, width: 16, height: 16 });
+    const tileId = findEmptyTileId(world);
+    const treasuryBefore = world.player.treasury;
+    world.accessibilityDirty = false;
+
+    const result = buildRoad(world, tileId);
+    expect(result.ok).toBe(true);
+    expect(world.tilesById.get(tileId)!.use).toBe("road");
+    expect(world.player.treasury).toBe(treasuryBefore - world.params.roadBuildCost);
+    expect(world.accessibilityDirty).toBe(true);
+  });
+
+  it("removeRoad reverts a road tile to empty and marks the network dirty", () => {
+    const world = createWorld({ seed: 1, width: 16, height: 16 });
+    const roadTile = world.tiles.find((t) => t.use === "road")!;
+    world.accessibilityDirty = false;
+
+    const result = removeRoad(world, roadTile.id);
+    expect(result.ok).toBe(true);
+    expect(roadTile.use).toBe("empty");
+    expect(world.accessibilityDirty).toBe(true);
+  });
+
+  it("rejects building a road on a non-empty tile, and removing a road from a non-road tile", () => {
+    const world = createWorld({ seed: 1, width: 16, height: 16 });
+    const residentialTile = world.tiles.find((t) => t.use === "residential")!;
+    expect(buildRoad(world, residentialTile.id).ok).toBe(false);
+    expect(removeRoad(world, residentialTile.id).ok).toBe(false);
+  });
+});
+
 describe("job centers", () => {
   it("buildJobCenter requires the tile to be zoned commercial first", () => {
     const world = createWorld({ seed: 1, width: 16, height: 16 });
@@ -75,10 +124,10 @@ describe("job centers", () => {
     expect(result.ok).toBe(false);
   });
 
-  it("builds a business with vacant job slots that feeds jobAccess on the next land value pass", () => {
+  it("builds a business with vacant job slots that feeds jobAccess on the next network recompute", () => {
     const world = createWorld({ seed: 1, width: 16, height: 16 });
     computeLandValues(world);
-    const tileId = findEmptyTileId(world);
+    const tileId = findConnectedEmptyTileId(world);
     const before = inspectTile(world, tileId)!.landValueBreakdown.jobAccess;
 
     expect(zoneCommercial(world, tileId).ok).toBe(true);
@@ -92,6 +141,9 @@ describe("job centers", () => {
       expect(world.jobSlots.get(jobId)!.occupantId).toBeNull();
     }
 
+    // computeLandValues alone only reads the cache — building a job center
+    // doesn't take effect until the (expensive) network step actually reruns.
+    recomputeNetwork(world);
     computeLandValues(world);
     const after = inspectTile(world, tileId)!.landValueBreakdown.jobAccess;
     expect(after).toBeGreaterThan(before);
@@ -108,7 +160,7 @@ describe("job centers", () => {
 
   it("an unemployed household can be hired into a player-built job center through the existing hiring logic", () => {
     const world = createWorld({ seed: 3, width: 16, height: 16, initialEmploymentRate: 0 });
-    const tileId = findEmptyTileId(world);
+    const tileId = findConnectedEmptyTileId(world);
     zoneCommercial(world, tileId);
     buildJobCenter(world, tileId);
 
@@ -176,32 +228,51 @@ describe("bulldoze", () => {
   });
 });
 
-describe("amenity investment", () => {
-  it("raises amenity within the radius and leaves tiles outside it untouched", () => {
+describe("amenity: placed parks", () => {
+  it("raises amenity within the radius and leaves tiles outside it untouched, once computeAmenityField runs", () => {
     const world = createWorld({ seed: 1, width: 20, height: 20 });
-    const center = world.tiles.find((t) => t.x === 10 && t.y === 10)!;
-    const inRadius = world.tiles.find((t) => t.x === 11 && t.y === 10)!;
-    const outsideRadius = world.tiles.find((t) => t.x === 19 && t.y === 19)!;
-    const before = { center: center.amenity, inRadius: inRadius.amenity, outside: outsideRadius.amenity };
+    const center = world.tiles.find((t) => t.use === "empty" && t.x > 2 && t.x < 17 && t.y > 2 && t.y < 17)!;
+    const inRadius = world.tiles.find((t) => distance(t.x, t.y, center.x, center.y) === 1)!;
+    const outsideRadius = world.tiles.find((t) => distance(t.x, t.y, center.x, center.y) > world.params.parkRadius)!;
+    const before = { center: center.baselineAmenity, inRadius: inRadius.amenity, outside: outsideRadius.amenity };
 
-    const result = investInAmenity(world, center.id);
+    const result = buildAmenity(world, center.id);
     expect(result.ok).toBe(true);
+    computeAmenityField(world);
 
-    expect(center.amenity).toBeCloseTo(before.center + world.params.amenityInvestmentAmount, 9);
-    expect(inRadius.amenity).toBeCloseTo(before.inRadius + world.params.amenityInvestmentAmount, 9);
+    expect(center.amenity).toBeCloseTo(before.center + world.params.parkStrength, 9);
+    expect(inRadius.amenity).toBeCloseTo(before.inRadius + world.params.parkStrength, 9);
     expect(outsideRadius.amenity).toBeCloseTo(before.outside, 9);
   });
 
   it("raised amenity flows into land value on the next computeLandValues pass with no other change", () => {
     const world = createWorld({ seed: 1, width: 16, height: 16 });
     computeLandValues(world);
-    const tile = world.tiles[0]!;
+    const tile = world.tiles.find((t) => t.use === "empty")!;
     const before = tile.landValue;
 
-    investInAmenity(world, tile.id);
+    buildAmenity(world, tile.id);
+    computeAmenityField(world);
     computeLandValues(world);
 
-    expect(tile.landValue).toBeCloseTo(before + world.params.amenityInvestmentAmount, 9);
+    expect(tile.landValue).toBeCloseTo(before + world.params.parkStrength, 9);
+  });
+
+  it("removeAmenity reverts the tile to empty and its amenity contribution disappears", () => {
+    const world = createWorld({ seed: 1, width: 16, height: 16 });
+    const tile = world.tiles.find((t) => t.use === "empty")!;
+    const before = tile.amenity;
+
+    buildAmenity(world, tile.id);
+    computeAmenityField(world);
+    expect(tile.amenity).toBeGreaterThan(before);
+
+    const parkId = tile.amenityObjectId!;
+    world.amenities.delete(parkId);
+    tile.amenityObjectId = null;
+    tile.use = "empty";
+    computeAmenityField(world);
+    expect(tile.amenity).toBeCloseTo(before, 9);
   });
 });
 
@@ -209,12 +280,18 @@ describe("tax", () => {
   it("applyIncomeTax reduces employed households' income by exactly the tax rate, every tick", () => {
     const world = createWorld({ seed: 1, width: 16, height: 16 });
     setTaxRate(world, 0.5);
+    // Pick a household already employed BEFORE this tick runs — applyIncomeTax
+    // only taxes whoever is employed when it runs (early in the tick); anyone
+    // hired later in the same tick (jobSearch/businessHiring, which run after)
+    // gets the untaxed wage until the next tick, which is a separate, correct
+    // behavior this test isn't about.
+    const alreadyEmployed = Array.from(world.households.values()).find((h) => h.jobSlotId);
+    expect(alreadyEmployed).toBeDefined();
+    const wage = world.jobSlots.get(alreadyEmployed!.jobSlotId!)!.wage;
+
     runTicks(world, 1);
 
-    const employed = Array.from(world.households.values()).find((h) => h.jobSlotId);
-    expect(employed).toBeDefined();
-    const wage = world.jobSlots.get(employed!.jobSlotId!)!.wage;
-    expect(employed!.income).toBeCloseTo(wage * 0.5, 9);
+    expect(alreadyEmployed!.income).toBeCloseTo(wage * 0.5, 9);
   });
 
   // NOTE: a test asserting "higher tax rate -> more relocations" was removed
@@ -245,13 +322,11 @@ describe("tax", () => {
     expectedRevenue *= world.player.taxRate;
 
     // applyUpkeep runs right after collectTaxes in the same tick, so the net
-    // change also includes upkeep on every existing job center — read the
-    // exact same way applyUpkeep computes it, since that's a separate
-    // mechanic from the revenue formula this test targets.
-    let expectedUpkeep = world.businesses.size * world.params.jobCenterUpkeepPerTick;
-    let investedAmenityTotal = 0;
-    for (const tile of world.tiles) investedAmenityTotal += tile.investedAmenity;
-    expectedUpkeep += investedAmenityTotal * world.params.amenityUpkeepPerPoint;
+    // change also includes upkeep on every existing job center/road/park —
+    // read the exact same way applyUpkeep computes it, since that's a
+    // separate mechanic from the revenue formula this test targets.
+    const roadCount = world.tiles.filter((t) => t.use === "road").length;
+    const expectedUpkeep = world.businesses.size * world.params.jobCenterUpkeepPerTick + world.amenities.size * world.params.parkUpkeepPerTick + roadCount * world.params.roadUpkeepPerTick;
 
     expect(world.player.treasury - before).toBeCloseTo(expectedRevenue - expectedUpkeep, 6);
   });

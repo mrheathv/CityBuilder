@@ -189,9 +189,16 @@
         line-height: 1;
         align-items: center;
         justify-content: center;
+        touch-action: manipulation;
       }
       #info-backdrop {
         display: none;
+        /* iOS Safari only reliably dispatches click events on a plain <div>
+           if it looks "clickable" via cursor: pointer — without this, tapping
+           the backdrop to dismiss the sheet can silently do nothing on iOS
+           even though the same code works fine everywhere else. */
+        cursor: pointer;
+        touch-action: manipulation;
       }
       .section-title {
         color: #9ad;
@@ -475,23 +482,27 @@
       </div>
 
       <div class="toolbar" id="overlay-toolbar">
-        <span class="toolbar-label">Overlay [1-5]</span>
+        <span class="toolbar-label">Overlay [1-6]</span>
         <button data-overlay="landValue">1 Land value</button>
         <button data-overlay="occupancy">2 Population</button>
         <button data-overlay="congestion">3 Congestion</button>
         <button data-overlay="landUse">4 Land use</button>
         <button data-overlay="density">5 Density</button>
+        <button data-overlay="roads">6 Roads</button>
       </div>
 
       <div class="toolbar" id="tool-toolbar">
         <span class="toolbar-label">Tool</span>
         <button data-tool="inspect">Inspect</button>
+        <button data-tool="buildRoad">Build Road</button>
+        <button data-tool="removeRoad">Remove Road</button>
         <button data-tool="zoneResidential">Zone Residential</button>
         <button data-tool="zoneCommercial">Zone Commercial</button>
         <button data-tool="buildJobCenter">Build Job Center</button>
         <button data-tool="removeJobCenter">Remove Job Center</button>
         <button data-tool="unzone">Unzone</button>
-        <button data-tool="investAmenity">Invest Amenity</button>
+        <button data-tool="buildAmenity">Build Park</button>
+        <button data-tool="removeAmenity">Remove Park</button>
       </div>
 
       <div id="main">

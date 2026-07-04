@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { createWorld } from "../src/sim/worldgen.js";
 import { computeLandValues } from "../src/sim/landValue.js";
+import { networkDistanceToBusiness } from "../src/sim/roadNetwork.js";
+import { tileIndex } from "../src/sim/geometry.js";
 
 function pearsonCorrelation(xs: number[], ys: number[]): number {
   const n = xs.length;
@@ -20,16 +22,21 @@ function pearsonCorrelation(xs: number[], ys: number[]): number {
 }
 
 describe("computeLandValues", () => {
-  it("gives tiles closer to their nearest business a higher jobAccess component", () => {
+  it("gives tiles with shorter network distance to their nearest business a higher jobAccess component", () => {
     const world = createWorld({ seed: 3, width: 16, height: 16 });
     computeLandValues(world);
 
-    const businessTiles = Array.from(world.businesses.values()).map((b) => world.tilesById.get(b.tileId)!);
-    const distToNearestBusiness = (t: { x: number; y: number }) =>
-      Math.min(...businessTiles.map((b) => Math.abs(t.x - b.x) + Math.abs(t.y - b.y)));
+    const businessIds = Array.from(world.businesses.keys());
+    const dists: number[] = [];
+    const accesses: number[] = [];
+    for (const tile of world.tiles) {
+      const i = tileIndex(world.width, tile.x, tile.y);
+      if (world.network.connectedByTile[i] !== 1) continue; // disconnected tiles are a different regime, not just "far"
+      const d = Math.min(...businessIds.map((id) => networkDistanceToBusiness(world, tile, id)));
+      dists.push(d);
+      accesses.push(tile.landValueBreakdown.jobAccess);
+    }
 
-    const dists = world.tiles.map(distToNearestBusiness);
-    const accesses = world.tiles.map((t) => t.landValueBreakdown.jobAccess);
     expect(pearsonCorrelation(dists, accesses)).toBeLessThan(-0.4);
   });
 
@@ -42,19 +49,18 @@ describe("computeLandValues", () => {
     }
   });
 
-  it("congestion rises as more nearby units become occupied", () => {
-    const world = createWorld({ seed: 5, width: 16, height: 16, initialOccupancyRate: 0 });
-    computeLandValues(world);
-    const before = world.tiles.find((t) => t.use === "residential")!.landValueBreakdown.congestion;
+  it("congestion in the breakdown is read straight from the cached network congestion field, not recomputed by computeLandValues itself", () => {
+    // How congestion actually accumulates from routed commuters is roadNetwork.test.ts's
+    // job (recomputeNetwork's edge-congestion tests); this only checks that
+    // computeLandValues wires the cache through correctly.
+    const world = createWorld({ seed: 5, width: 12, height: 12 });
+    const tile = world.tiles.find((t) => t.use === "residential")!;
+    const i = tileIndex(world.width, tile.x, tile.y);
 
-    // Occupy every housing unit to maximize local density everywhere.
-    let i = 0;
-    for (const unit of world.housingUnits.values()) {
-      unit.occupantId = `synthetic-${i++}`;
-    }
+    world.network.congestionByTile[i] = 7.5; // simulate a congested doorstep
     computeLandValues(world);
-    const after = world.tiles.find((t) => t.use === "residential")!.landValueBreakdown.congestion;
 
-    expect(after).toBeGreaterThan(before);
+    expect(tile.landValueBreakdown.congestion).toBeCloseTo(7.5, 9);
+    expect(tile.landValue).toBeCloseTo(tile.amenity + tile.landValueBreakdown.jobAccess - 7.5, 9);
   });
 });

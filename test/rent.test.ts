@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { defaultParams } from "../src/sim/params.js";
 import { createRng } from "../src/sim/rng.js";
 import { updateRents } from "../src/sim/rent.js";
+import { createEmptyNetworkCache } from "../src/sim/roadNetwork.js";
 import type { HousingUnit, Tile, World } from "../src/sim/types.js";
 
 /**
@@ -25,12 +26,13 @@ function makeTwoClusterWorld(): { world: World; unitA: HousingUnit; unitB: Housi
       x,
       y: 0,
       use: "residential",
+      baselineAmenity: 0,
       amenity: 0,
-      investedAmenity: 0,
       landValue: 10,
       landValueBreakdown: { jobAccess: 10, amenity: 0, congestion: 0 },
       housingUnitIds: [],
       businessId: null,
+      amenityObjectId: null,
       developmentLevel: 1,
       growthStreak: 0,
       decayStreak: 0,
@@ -87,7 +89,10 @@ function makeTwoClusterWorld(): { world: World; unitA: HousingUnit; unitB: Housi
     jobSlots: new Map(),
     businesses: new Map(),
     households: new Map(),
+    amenities: new Map(),
     nextHouseholdSeq: 0,
+    network: createEmptyNetworkCache(25),
+    accessibilityDirty: false,
     player: { treasury: params.initialTreasury, taxRate: params.initialTaxRate, lastTaxRevenue: 0, lastUpkeepCost: 0 },
     game: { status: "playing", reason: null, ticksInsolvent: 0 },
     history: [],

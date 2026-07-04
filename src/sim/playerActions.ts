@@ -1,18 +1,20 @@
-import { distance } from "./geometry.js";
 import type { Business, HousingUnit, JobSlot, World } from "./types.js";
+import type { ActionResult } from "./actionResult.js";
 
-export type ActionResult = { ok: true } | { ok: false; reason: string };
+export type { ActionResult } from "./actionResult.js";
 
 /**
- * Every function in this file is the *entire* surface the player touches.
- * None of them ever set occupantId, homeUnitId, or jobSlotId — they only
- * create empty capacity (units/jobs), change what a tile is zoned for, bump
- * a tile's amenity, or move money. Whether anyone ever moves into what gets
- * built here is decided exclusively by the existing agent search/relocation
- * logic on the next tick.
+ * Every function in this file (plus buildAmenity/removeAmenity in amenity.ts)
+ * is the *entire* surface the player touches. None of them ever set
+ * occupantId, homeUnitId, or jobSlotId — they only create empty capacity
+ * (units/jobs), change what a tile is zoned/built as, or move money.
+ * Whether anyone ever moves into what gets built here — or routes over a
+ * road that gets built here — is decided exclusively by the existing agent
+ * search/relocation logic and the road-network recompute on the next tick.
  */
 
-function spend(world: World, cost: number): ActionResult | null {
+/** Shared by amenity.ts too — the one place "can the player afford this, and if so deduct it" is decided. */
+export function spend(world: World, cost: number): ActionResult | null {
   if (world.player.treasury < cost) {
     return { ok: false, reason: `insufficient treasury: need ${cost}, have ${world.player.treasury.toFixed(0)}` };
   }
@@ -80,6 +82,7 @@ export function buildJobCenter(world: World, tileId: string): ActionResult {
   const business: Business = { id: businessId, tileId: tile.id, jobSlotIds };
   world.businesses.set(businessId, business);
   tile.businessId = businessId;
+  world.accessibilityDirty = true; // a new job source changes the network's access field
   return { ok: true };
 }
 
@@ -96,6 +99,7 @@ export function removeJobCenter(world: World, tileId: string): ActionResult {
   for (const jobId of business.jobSlotIds) world.jobSlots.delete(jobId);
   world.businesses.delete(business.id);
   tile.businessId = null;
+  world.accessibilityDirty = true;
   return { ok: true };
 }
 
@@ -104,6 +108,7 @@ export function unzoneTile(world: World, tileId: string): ActionResult {
   const tile = world.tilesById.get(tileId);
   if (!tile) return { ok: false, reason: "tile not found" };
   if (tile.use === "empty") return { ok: false, reason: "tile is already empty" };
+  if (tile.use === "road" || tile.use === "park") return { ok: false, reason: "use removeRoad/removeAmenity for this tile" };
 
   if (tile.use === "commercial" && tile.businessId) {
     return { ok: false, reason: "remove the job center first" };
@@ -124,19 +129,27 @@ export function unzoneTile(world: World, tileId: string): ActionResult {
   return { ok: true };
 }
 
-export function investInAmenity(world: World, tileId: string): ActionResult {
-  const center = world.tilesById.get(tileId);
-  if (!center) return { ok: false, reason: "tile not found" };
+export function buildRoad(world: World, tileId: string): ActionResult {
+  const tile = world.tilesById.get(tileId);
+  if (!tile) return { ok: false, reason: "tile not found" };
+  if (tile.use !== "empty") return { ok: false, reason: "tile is not empty" };
 
-  const insufficientFunds = spend(world, world.params.amenityInvestmentCost);
+  const insufficientFunds = spend(world, world.params.roadBuildCost);
   if (insufficientFunds) return insufficientFunds;
 
-  for (const tile of world.tiles) {
-    if (distance(center.x, center.y, tile.x, tile.y) <= world.params.amenityInvestmentRadius) {
-      tile.amenity += world.params.amenityInvestmentAmount;
-      tile.investedAmenity += world.params.amenityInvestmentAmount;
-    }
-  }
+  tile.use = "road";
+  world.accessibilityDirty = true; // the network topology just changed
+  return { ok: true };
+}
+
+/** Always allowed — a road has no occupants to protect. Removing one that strands connected tiles just shows up as lower access next recompute, exactly like any other emergent consequence. */
+export function removeRoad(world: World, tileId: string): ActionResult {
+  const tile = world.tilesById.get(tileId);
+  if (!tile) return { ok: false, reason: "tile not found" };
+  if (tile.use !== "road") return { ok: false, reason: "no road on this tile" };
+
+  tile.use = "empty";
+  world.accessibilityDirty = true;
   return { ok: true };
 }
 

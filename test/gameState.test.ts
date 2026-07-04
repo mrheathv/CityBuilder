@@ -1,43 +1,42 @@
 import { describe, expect, it } from "vitest";
 import { createWorld } from "../src/sim/worldgen.js";
 import { tick, runTicks } from "../src/sim/tick.js";
-import { investInAmenity } from "../src/sim/playerActions.js";
+import { buildAmenity, computeAmenityField } from "../src/sim/amenity.js";
 import { HISTORY_LENGTH } from "../src/sim/gameState.js";
 
 describe("upkeep", () => {
   it("charges jobCenterUpkeepPerTick for every existing business, filled or not", () => {
     const world = createWorld({ seed: 1, width: 12, height: 12 });
     tick(world);
-    const expected = world.businesses.size * world.params.jobCenterUpkeepPerTick;
+    const roadCount = world.tiles.filter((t) => t.use === "road").length;
+    const expected = world.businesses.size * world.params.jobCenterUpkeepPerTick + roadCount * world.params.roadUpkeepPerTick;
     expect(world.player.lastUpkeepCost).toBeCloseTo(expected, 6);
   });
 
-  it("adds amenity upkeep proportional to total invested (not world-gen baseline) amenity", () => {
+  it("charges parkUpkeepPerTick for every existing park", () => {
     const world = createWorld({ seed: 1, width: 12, height: 12 });
-    const centerTile = world.tiles[Math.floor(world.tiles.length / 2)]!;
-    const before = world.businesses.size * world.params.jobCenterUpkeepPerTick;
+    const emptyTile = world.tiles.find((t) => t.use === "empty")!;
+    tick(world);
+    const before = world.player.lastUpkeepCost;
 
-    investInAmenity(world, centerTile.id);
+    expect(buildAmenity(world, emptyTile.id).ok).toBe(true);
     tick(world);
 
-    let investedTotal = 0;
-    for (const t of world.tiles) investedTotal += t.investedAmenity;
-    expect(investedTotal).toBeGreaterThan(0);
-
-    const expected = world.businesses.size * world.params.jobCenterUpkeepPerTick + investedTotal * world.params.amenityUpkeepPerPoint;
+    const roadCount = world.tiles.filter((t) => t.use === "road").length;
+    const expected = world.businesses.size * world.params.jobCenterUpkeepPerTick + roadCount * world.params.roadUpkeepPerTick + world.params.parkUpkeepPerTick;
     expect(world.player.lastUpkeepCost).toBeCloseTo(expected, 6);
     expect(world.player.lastUpkeepCost).toBeGreaterThan(before);
   });
 
-  it("investInAmenity increments tile.investedAmenity by exactly the invested amount, distinct from world-gen baseline amenity", () => {
+  it("buildAmenity places a park that raises amenity within its radius via computeAmenityField, distinct from the static baseline", () => {
     const world = createWorld({ seed: 1, width: 12, height: 12 });
-    const centerTile = world.tiles[Math.floor(world.tiles.length / 2)]!;
-    const baselineAmenity = centerTile.amenity;
+    const centerTile = world.tiles.find((t) => t.use === "empty")!;
+    const before = centerTile.amenity;
 
-    investInAmenity(world, centerTile.id);
+    expect(buildAmenity(world, centerTile.id).ok).toBe(true);
+    computeAmenityField(world);
 
-    expect(centerTile.investedAmenity).toBeCloseTo(world.params.amenityInvestmentAmount, 6);
-    expect(centerTile.amenity).toBeCloseTo(baselineAmenity + world.params.amenityInvestmentAmount, 6);
+    expect(centerTile.amenity).toBeCloseTo(before + world.params.parkStrength, 6);
   });
 });
 
